@@ -13,9 +13,9 @@ def csv_to_dict(file):
 
 
 
-try:
-	RESOURCES_DIR = os.getcwd() + r'\pkg\data\resources'
-	MAX_PRINCIPAL_QUANTUM_NUMBER = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_quantum_number.csv')
-except:
+RESOURCES_DIR = os.getcwd() + r'\pkg\data\resources'
+if  not os.path.exists(RESOURCES_DIR):
 	RESOURCES_DIR = os.getcwd() + r'\data\resources'
-	MAX_PRINCIPAL_QUANTUM_NUMBER = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_quantum_number.csv')
+
+MAX_PRINCIPAL_QUANTUM_NUMBER = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_quantum_number.csv')
+MAX_VALENCE = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_valence.csv')

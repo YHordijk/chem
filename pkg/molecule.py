@@ -10,7 +10,6 @@ else:
 
 
 
-
 ##### ========================================== FUNCTIONS FOR LOADING AND SAVING MOLECULES ========================================== ####
 
 def load_from_file(file):
@@ -118,8 +117,31 @@ def load_mol(name):
 class Atom:
 	def __init__(self, element=None, position=None, charge=None):
 		self.element = element
+		self.atom_number = pt.elements.symbol(element).number
 		self.position = position
 		self.charge = charge
+
+		self.set_max_valence()
+		self.set_covalent_radius()
+
+
+	def distance_to(self, p):
+		if type(p) is Atom:
+			return np.linalg.norm(self.position - p.position)
+		return np.linalg.norm(self.position - p)
+
+
+	def set_max_valence(self):
+		#retrieve from data files
+		try:
+			self.max_valence = int(data.MAX_VALENCE[self.atom_number])
+		#default to 1
+		except:
+			self.max_valence = 1
+
+
+	def set_covalent_radius(self):
+		self.covalent_radius = pt.elements[self.atom_number].covalent_radius
 
 
 	def __repr__(self):
@@ -142,11 +164,94 @@ class Molecule:
 		#If a list of atoms is already given, append it to the list just produced
 		self.atoms += atoms
 
+		self.guess_bond_orders()
 
 
+	#### UTILITY FUNCTIONS
+	def get_atoms_by_element(self, element, blacklist=False):
+		'''
+		Method that returns a list of atoms belonging to element
+		if blacklist == True, return a list of all atoms NOT belonging to element
 
-	def get_bonds(self):
-		pass
+		element - string of element symbol
+		blacklist - boolean
+		'''
+		if blacklist:
+			return filter(lambda a: a.element != element, self.atoms)
+		return filter(lambda a: a.element == element, self.atoms)
+
+
+	def get_atoms_by_number(self, number, blacklist=False):
+		'''
+		Method that returns a list of atoms belonging to element
+		if blacklist == True, return a list of all atoms NOT belonging to element
+
+		element - string of element symbol
+		blacklist - boolean
+		'''
+		return self.get_atoms_by_element(self.number_to_element(number), blacklist=blacklist)
+
+
+	def element_to_number(self, element):
+		return pt.elements.symbol(element).number
+
+	def number_to_element(self, number):
+		return pt.elements[number].symbol
+
+
+	#### BOND ORDER FUNCTIONS
+	def initial_bonding(self):
+		bonds = {a:[] for a in self.atoms}
+
+		for a1 in self.atoms:
+			for a2 in self.atoms:
+				if a1 == a2:
+					continue
+				if a1.distance_to(a2) < a1.covalent_radius + a2.covalent_radius + 0.4:
+					bonds[a1].append((a1,1))
+
+		return bonds 
+
+
+	def guess_bond_orders(self, max_iters=100):
+		'''
+		Method that guesses the bond orders of the molecule.
+		
+		Current strategy:
+		- Sort elements from low valence to high valence (H < O < N < C, etc..) 
+		  and loops over the elements.
+			- Collect every atom of the element and checks its bond saturation.
+			- If the atom is not saturated, loop over the atoms it is bonded to.
+				- Check the saturation of the bonded atom. If the bonded atom 
+				  is also not saturated, increase the bond order to that bond.
+				- Terminate the loop if the current atom is saturated.
+		'''
+		#function to calculate saturation:
+		def unsaturated(a):
+			return sum([b[1] for b in bonds[a]]) < a.max_valence
+
+		#get the element: valence pairs from data
+		valences = list(data.MAX_VALENCE.items())
+		#sort them from low to high valence
+		valences = sorted(valences, key=lambda x: x[1])
+
+		
+		bonds = self.initial_bonding()
+
+		[print(b) for b in bonds.values()]
+
+		#loop over the elements and valences 
+		for num, val in valences:
+			#get all atoms of element
+			curr_atoms = self.get_atoms_by_number(num)
+
+			#loop over the atoms
+			for a in curr_atoms:
+				#calculate saturation
+				if unsaturated(a):
+					...
+
+				
 			
 
 	def __repr__(self):
@@ -165,6 +270,6 @@ class Molecule:
 if __name__ == '__main__':
 	structures_folder = os.getcwd() + '\\data\\resources\\xyz\\'
 	m = load_mol('aspirin')
-	[print(a) for a in m.atoms]
+	# [print(a) for a in m.atoms]
 else:
 	structures_folder = os.getcwd() + '\\pkg\\data\\resources\\xyz\\'
