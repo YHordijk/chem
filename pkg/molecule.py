@@ -2,11 +2,14 @@ import numpy as np
 import pubchempy as pcp
 import os
 import periodictable as pt
+import pygame as pg
 
-if __name__ == '__main__':
+try:
 	import data
-else:
+	import screen3D
+except:
 	import pkg.data as data
+	import pkg.screen3D
 
 
 
@@ -122,7 +125,12 @@ class Atom:
 		self.charge = charge
 
 		self.set_max_valence()
+		self.set_mass()
 		self.set_covalent_radius()
+
+
+	def __repr__(self):
+		return f'{self.element}({self.position[0]:.4f}, {self.position[1]:.4f}, {self.position[2]:.4f})'
 
 
 	def distance_to(self, p):
@@ -139,32 +147,42 @@ class Atom:
 		except:
 			self.max_valence = 1
 
+	def set_mass(self):
+		self.mass = pt.elements[self.atom_number].mass
+
 
 	def set_covalent_radius(self):
 		self.covalent_radius = pt.elements[self.atom_number].covalent_radius
-
-
-	def __repr__(self):
-		return f'{self.element}({self.position[0]:.4f}, {self.position[1]:.4f}, {self.position[2]:.4f})'
 
 
 
 class Molecule:
 	def __init__(self, name=[], elements=[], positions=[], charges=[], atoms=[]):
 		self.name = name
-		self.elements = elements
-		self.positions = positions
-		self.charges = charges
-
 
 		assert(len(elements) == len(positions))
+		self.elements = elements
+		self.positions = positions
+
+		self.charges = charges
 
 		#get atoms from elements, positions
 		self.atoms = [Atom(elements[i], positions[i]) for i in range(len(self.elements))]
 		#If a list of atoms is already given, append it to the list just produced
 		self.atoms += atoms
 
-		self.guess_bond_orders()
+		self._guess_bond_order_iters = 0
+		self.bonds = self.guess_bond_orders()
+
+
+	def __repr__(self):
+		string = ''
+		string += self.name + '\n'
+
+		for e, p in zip(self.elements, self.positions):
+			string += f'{e:2s}\t{p[0]: .5f}\t{p[1]: .5f}\t{p[2]: .5f}\n'
+
+		return string
 
 
 	#### UTILITY FUNCTIONS
@@ -177,8 +195,8 @@ class Molecule:
 		blacklist - boolean
 		'''
 		if blacklist:
-			return filter(lambda a: a.element != element, self.atoms)
-		return filter(lambda a: a.element == element, self.atoms)
+			return list(filter(lambda a: a.element != element, self.atoms))
+		return list(filter(lambda a: a.element == element, self.atoms))
 
 
 	def get_atoms_by_number(self, number, blacklist=False):
@@ -195,22 +213,38 @@ class Molecule:
 	def element_to_number(self, element):
 		return pt.elements.symbol(element).number
 
+
 	def number_to_element(self, number):
 		return pt.elements[number].symbol
 
 
+	def center_of_mass(self):
+		M = sum(a.mass for a in self.atoms)
+		return sum(a.mass * a.position for a in self.atoms)/M
+
+
+	def center(self, p=None):
+		if p is None: p = self.center_of_mass()
+		p = np.asarray(p)
+		for a in self.atoms:
+			a.position -= p
+
+
 	#### BOND ORDER FUNCTIONS
 	def initial_bonding(self):
-		bonds = {a:[] for a in self.atoms}
+		bonds = {a:{} for a in self.atoms}
 
 		for a1 in self.atoms:
 			for a2 in self.atoms:
 				if a1 == a2:
 					continue
 				if a1.distance_to(a2) < a1.covalent_radius + a2.covalent_radius + 0.4:
-					bonds[a1].append((a1,1))
+					bonds[a1][a2] = 1
+				#prevent overbonding by breaking loop when too many bonds are formed
+				if len(bonds[a1]) == a1.max_valence:
+					break
 
-		return bonds 
+		return bonds
 
 
 	def guess_bond_orders(self, max_iters=100):
@@ -228,40 +262,143 @@ class Molecule:
 		'''
 		#function to calculate saturation:
 		def unsaturated(a):
-			return sum([b[1] for b in bonds[a]]) < a.max_valence
+			return sum(bonds[a].values()) < a.max_valence
 
+		def hybridisation(a):
+			c = len(bonds[a])
+			if a.max_valence == 1: return 0
+
+			elif a.max_valence == 2:
+				if c == 2: return 3
+				elif c == 1: return 2
+
+			elif a.max_valence == 3:
+				if c == 3: return 3
+				elif c == 2: return 2
+				elif c == 1: return 1
+
+			elif a.max_valence == 4:
+				if c == 4: return 3
+				elif c == 3: return 2
+				elif c == 2: return 1
+					
+
+		### setup
 		#get the element: valence pairs from data
 		valences = list(data.MAX_VALENCE.items())
 		#sort them from low to high valence
 		valences = sorted(valences, key=lambda x: x[1])
 
-		
+
 		bonds = self.initial_bonding()
 
-		[print(b) for b in bonds.values()]
-
+		### algorithm
 		#loop over the elements and valences 
 		for num, val in valences:
 			#get all atoms of element
 			curr_atoms = self.get_atoms_by_number(num)
+			np.random.shuffle(curr_atoms)
 
 			#loop over the atoms
-			for a in curr_atoms:
+			for a1 in curr_atoms:
 				#calculate saturation
-				if unsaturated(a):
-					...
+				if unsaturated(a1):
+					neighbours = sorted(bonds[a1].copy(), key=lambda x: a1.distance_to(x))
 
-				
+					#if atom is sp, it must be bound with another sp atom with bond order 3
+					if hybridisation(a1) == 1:
+						for a2 in neighbours:
+							if hybridisation(a2) == 1:
+								bonds[a1][a2] = 3
+								bonds[a2][a1] = 3
+
+					if unsaturated(a1):
+						for a2 in neighbours:
+							if unsaturated(a1) and unsaturated(a2):
+								bonds[a1][a2] += 1
+								bonds[a2][a1] += 1
+
+		### convergence
+		#check if all atoms are saturated, if not recurse the function
+		if not all(not unsaturated(a) for a in self.atoms) \
+				and self._guess_bond_order_iters < max_iters:
+
+			self._guess_bond_order_iters += 1
+			self.guess_bond_orders()
+
+		return bonds
 			
 
-	def __repr__(self):
-		string = ''
-		string += self.name + '\n'
+##### ========================================== DISPLAY CLASS ========================================== ####
 
-		for e, p in zip(self.elements, self.positions):
-			string += f'{e:2s}\t{p[0]: .5f}\t{p[1]: .5f}\t{p[2]: .5f}\n'
+class Display(screen3D.Screen3D):
+	def __init__(self, size=(1280,720), camera_position=np.array([0.,0.,30.]), camera_orientation=(0.,0.,0.), project_type="perspective", bkgr_colour=(0,0,0)):
+		self.camera_position = np.asarray(camera_position)
+		self.camera_orientation = np.asarray(camera_orientation)
+		self.project_type = project_type
+		self.bkgr_colour = bkgr_colour
+			
+		self._size = self.width, self.height = size
+		
 
-		return string
+	def draw_bond(self, a1, a2, width=1, outline_width=4):
+		draw_line = pg.draw.line
+		
+
+
+
+	def handle_events(self, events, screen_params):
+			'''
+			Function that handles events during running
+			'''
+			for e in events:
+				if e.type == pg.VIDEORESIZE:
+					self.size = e.dict['size']
+
+				if e.type == pg.QUIT:
+					screen_params['run'] = False
+
+			return screen_params
+
+	def handle_keys(self, keys, screen_params):
+			'''
+			Function that handles key states during running
+			'''
+			if keys[pg.K_ESCAPE]:
+				screen_params['run'] = False
+
+			return screen_params
+
+
+	def draw_molecule(self, mol):
+		'''
+		Method that draws and displays the provided molecule
+		'''
+
+		disp = pg.display.set_mode(self.size, pg.locals.HWSURFACE|pg.locals.DOUBLEBUF|pg.locals.RESIZABLE)
+
+		draw_surf = pg.surface.Surface(self.size)
+
+
+		clock = pg.time.Clock()
+		tick = clock.tick_busy_loop
+
+		#set parameters for the screen
+		screen_params = {}
+		screen_params['run'] = True
+		screen_params['FPS'] = 120
+		screen_params['updt'] = 0
+		screen_params['time'] = 0
+
+		while screen_params['run']:
+			screen_params['updt'] += 1
+			dT = tick(screen_params['FPS'])/1000
+			screen_params['time'] += dT
+
+			screen_params = self.handle_keys(pg.key.get_pressed(), screen_params)
+			screen_params = self.handle_events(pg.event.get(), screen_params)
+
+			draw_surf.fill(self.bkgr_colour)
 
 
 
@@ -269,7 +406,10 @@ class Molecule:
 
 if __name__ == '__main__':
 	structures_folder = os.getcwd() + '\\data\\resources\\xyz\\'
-	m = load_mol('aspirin')
+	m = load_mol('hexabenzocoronene')
+	d = Display()
+	d.draw_molecule(m)
+	# [print(b) for b in m.bonds.items()]
 	# [print(a) for a in m.atoms]
 else:
 	structures_folder = os.getcwd() + '\\pkg\\data\\resources\\xyz\\'
