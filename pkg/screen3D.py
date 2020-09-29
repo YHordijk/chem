@@ -583,6 +583,7 @@ class Screen3D:
 		result = x_rot_mat @ y_rot_mat @ z_rot_mat @ (a)
 		self.camera_position += result.T
 
+
 	def look_at(self, point=None, obj=None):
 		if point is None:
 			point = obj.position
@@ -603,7 +604,6 @@ class Screen3D:
 
 		self.camera_orientation = np.array([rotx, roty, 0])
 		return self.camera_orientation
-
 
 
 	def rotate(self, array, rotation):

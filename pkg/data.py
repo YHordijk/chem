@@ -7,7 +7,7 @@ def csv_to_dict(file):
 		for row in f.readlines():
 			row = row.strip('\n')
 			row = row.split(', ')
-			d[int(row[0])] = row[1]
+			d[int(row[0])] = row[1:]
 
 	return d
 
@@ -19,3 +19,4 @@ if  not os.path.exists(RESOURCES_DIR):
 
 MAX_PRINCIPAL_QUANTUM_NUMBER = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_quantum_number.csv')
 MAX_VALENCE = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_valence.csv')
+ATOM_COLOURS = csv_to_dict(rf'{RESOURCES_DIR}\elements\colours.csv')

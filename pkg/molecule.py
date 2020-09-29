@@ -3,6 +3,8 @@ import pubchempy as pcp
 import os
 import periodictable as pt
 import pygame as pg
+from math import sin, cos
+import math
 
 try:
 	import data
@@ -35,7 +37,7 @@ def get_from_pubchem(name):
 	mol = pcp.get_compounds(name, ('name', 'cid')[type(name) is int], record_type='3d')
 	if len(mol) == 0:
 		print(f'No compound or 3d structure with name {name} found on Pubchem. Please try again with CID.')
-		return
+		return 
 
 	print(f'{len(mol)} compounds found on Pubchem with name {name}.')
 	mol = mol[0]
@@ -78,7 +80,8 @@ def find_mol(name, root=None, exact=True):
 		return paths[0]
 
 	#if not found, search pubchem
-	get_from_pubchem(name)
+	if get_from_pubchem(name) is None:
+		return
 
 	return find_mol(name, root=root)
 
@@ -127,6 +130,7 @@ class Atom:
 		self.set_max_valence()
 		self.set_mass()
 		self.set_covalent_radius()
+		self.set_colour()
 
 
 	def __repr__(self):
@@ -142,9 +146,10 @@ class Atom:
 	def set_max_valence(self):
 		#retrieve from data files
 		try:
-			self.max_valence = int(data.MAX_VALENCE[self.atom_number])
+			self.max_valence = int(data.MAX_VALENCE[self.atom_number][0])
 		#default to 1
 		except:
+			raise
 			self.max_valence = 1
 
 	def set_mass(self):
@@ -154,6 +159,10 @@ class Atom:
 	def set_covalent_radius(self):
 		self.covalent_radius = pt.elements[self.atom_number].covalent_radius
 
+
+	def set_colour(self):
+		c = data.ATOM_COLOURS[self.atom_number]
+		self.colour = tuple([int(i) for i in c])
 
 
 class Molecule:
@@ -174,6 +183,8 @@ class Molecule:
 		self._guess_bond_order_iters = 0
 		self.bonds = self.guess_bond_orders()
 
+		# [print(b) for b in self.bonds.items()]
+
 
 	def __repr__(self):
 		string = ''
@@ -183,6 +194,41 @@ class Molecule:
 			string += f'{e:2s}\t{p[0]: .5f}\t{p[1]: .5f}\t{p[2]: .5f}\n'
 
 		return string
+
+
+	#### MOLECULE MANIPULATION
+	def rotate(self, rotation):
+		r = rotation[0]
+		Rx = np.array(([	  1, 	  0,	   0],
+					   [	  0, cos(r), -sin(r)],
+					   [      0, sin(r),  cos(r)]))
+
+		r = rotation[1]
+		Ry = np.array(([ cos(r),  	   0, sin(r)],
+					   [ 	  0, 	   1,	   0],
+					   [-sin(r), 	   0, cos(r)]))
+
+		r = rotation[2]
+		Rz = np.array(([ cos(r), -sin(r), 	   0],
+					   [ sin(r),  cos(r), 	   0],
+					   [ 	  0, 	   0, 	   1]))
+
+		R = Rx @ Ry @ Rz
+
+		for a in self.atoms:
+			a.position = R @ a.position
+
+
+	def center_of_mass(self):
+		M = sum(a.mass for a in self.atoms)
+		return sum(a.mass * a.position for a in self.atoms)/M
+
+
+	def center(self, p=None):
+		if p is None: p = self.center_of_mass()
+		p = np.asarray(p)
+		for a in self.atoms:
+			a.position -= p
 
 
 	#### UTILITY FUNCTIONS
@@ -218,18 +264,6 @@ class Molecule:
 		return pt.elements[number].symbol
 
 
-	def center_of_mass(self):
-		M = sum(a.mass for a in self.atoms)
-		return sum(a.mass * a.position for a in self.atoms)/M
-
-
-	def center(self, p=None):
-		if p is None: p = self.center_of_mass()
-		p = np.asarray(p)
-		for a in self.atoms:
-			a.position -= p
-
-
 	#### BOND ORDER FUNCTIONS
 	def initial_bonding(self):
 		bonds = {a:{} for a in self.atoms}
@@ -240,8 +274,9 @@ class Molecule:
 					continue
 				if a1.distance_to(a2) < a1.covalent_radius + a2.covalent_radius + 0.4:
 					bonds[a1][a2] = 1
+					bonds[a2][a1] = 1
 				#prevent overbonding by breaking loop when too many bonds are formed
-				if len(bonds[a1]) == a1.max_valence:
+				if len(bonds[a1]) > a1.max_valence-1:
 					break
 
 		return bonds
@@ -289,7 +324,6 @@ class Molecule:
 		#sort them from low to high valence
 		valences = sorted(valences, key=lambda x: x[1])
 
-
 		bonds = self.initial_bonding()
 
 		### algorithm
@@ -332,18 +366,40 @@ class Molecule:
 ##### ========================================== DISPLAY CLASS ========================================== ####
 
 class Display(screen3D.Screen3D):
-	def __init__(self, size=(1280,720), camera_position=np.array([0.,0.,30.]), camera_orientation=(0.,0.,0.), project_type="perspective", bkgr_colour=(0,0,0)):
+	def __init__(self, size=(1280,720), camera_position=np.array([0.,0.,20.]), camera_orientation=(0.,0.,0.), project_type="perspective", bkgr_colour=(0,0,0)):
 		self.camera_position = np.asarray(camera_position)
 		self.camera_orientation = np.asarray(camera_orientation)
 		self.project_type = project_type
 		self.bkgr_colour = bkgr_colour
 			
 		self._size = self.width, self.height = size
+		self.set_projection_plane()
 		
 
-	def draw_bond(self, a1, a2, width=1, outline_width=4):
+	def draw_bond(self, surf, a1, a2, order, width=3, outline_width=2):
 		draw_line = pg.draw.line
-		
+		p1, p2 = self.atom_projections[a1], self.atom_projections[a2]
+
+		if order == 1:
+			draw_line(surf, (255,255,255),p1,p2, width)
+
+		if order == 2:
+			d = width
+			poss = np.asarray([p1,p2])
+			perp = poss - poss[0]
+			perp = np.asarray([perp[0], (perp[1][1], -perp[1][0])])[1]
+			perp = d * perp / np.linalg.norm(perp)
+
+			draw_line(surf, (255,255,255), p1-perp, p2-perp, width)
+			draw_line(surf, (255,255,255), p1+perp, p2+perp, width)
+
+
+
+	def draw_atom(self, surf, a, size=300, outline_width=2):
+		rad = int(a.covalent_radius/a.distance_to(self.camera_position) * size)
+		p = self.atom_projections[a]
+		pg.draw.circle(surf, (255,255,255), p, rad+outline_width)
+		pg.draw.circle(surf, a.colour, p, rad)
 
 
 
@@ -354,11 +410,13 @@ class Display(screen3D.Screen3D):
 			for e in events:
 				if e.type == pg.VIDEORESIZE:
 					self.size = e.dict['size']
+					self.set_projection_plane()
 
 				if e.type == pg.QUIT:
 					screen_params['run'] = False
 
 			return screen_params
+
 
 	def handle_keys(self, keys, screen_params):
 			'''
@@ -370,15 +428,43 @@ class Display(screen3D.Screen3D):
 			return screen_params
 
 
+	def set_rotation_matrix(self):
+		t = self.camera_orientation
+
+		x_rot_mat = np.array([[1,0,0], [0, cos(t[0]), sin(t[0])], [0, -sin(t[0]), cos(t[0])]])
+		y_rot_mat = np.array([[cos(t[1]), 0, -sin(t[1])], [0,1,0], [sin(t[1]), 0, cos(t[1])]])
+		z_rot_mat = np.array([[cos(t[2]), sin(t[2]), 0], [-sin(t[2]), cos(t[2]), 0], [0,0,1]])
+		z_rot_mat = np.array([[1,0,0], [0,1,0], [0,0,1]])
+
+		self.rotation_matrix = x_rot_mat @ y_rot_mat @ z_rot_mat
+
+
+	def set_projection_plane(self):
+		e = np.array([self.width/2, self.height/2, 600])
+		self.projection_plane = np.array([[1, 0, e[0]/e[2]], [0, 1, e[1]/e[2]], [0, 0, 1/e[2]]])
+
+
+	def project(self, p):
+		d = self.rotation_matrix @ (p - self.camera_position).T
+		f = self.projection_plane @ d
+		return int(round(f[0]/f[2])), int(round(f[1]/f[2]))
+
+
+	def pre_update(self, screen_params, mol):
+		self.set_rotation_matrix()
+		self.atom_projections = {a:self.project(a.position) for a in mol.atoms}
+		screen_params = self.handle_keys(pg.key.get_pressed(), screen_params)
+		screen_params = self.handle_events(pg.event.get(), screen_params)
+
+		return screen_params
+
+
 	def draw_molecule(self, mol):
 		'''
 		Method that draws and displays the provided molecule
 		'''
-
-		disp = pg.display.set_mode(self.size, pg.locals.HWSURFACE|pg.locals.DOUBLEBUF|pg.locals.RESIZABLE)
-
+		disp = pg.display.set_mode(self.size, pg.locals.HWSURFACE | pg.locals.DOUBLEBUF | pg.locals.RESIZABLE)
 		draw_surf = pg.surface.Surface(self.size)
-
 
 		clock = pg.time.Clock()
 		tick = clock.tick_busy_loop
@@ -386,19 +472,47 @@ class Display(screen3D.Screen3D):
 		#set parameters for the screen
 		screen_params = {}
 		screen_params['run'] = True
-		screen_params['FPS'] = 120
+		screen_params['FPS'] = 500
 		screen_params['updt'] = 0
 		screen_params['time'] = 0
 
+		cam_dist = lambda a: np.linalg.norm(a.position - self.camera_position)
+
+		atoms = mol.atoms
+		bonds = mol.bonds
+		# print(bonds)
+
+		#update loop
 		while screen_params['run']:
 			screen_params['updt'] += 1
 			dT = tick(screen_params['FPS'])/1000
 			screen_params['time'] += dT
 
-			screen_params = self.handle_keys(pg.key.get_pressed(), screen_params)
-			screen_params = self.handle_events(pg.event.get(), screen_params)
+			self.pre_update(screen_params, mol)
 
+			#clear screen
 			draw_surf.fill(self.bkgr_colour)
+
+			mol.rotate((0,.01,0))
+
+			#sort atoms by distance to camera and invert
+			sorted_atoms = sorted([(a, cam_dist(a)) for a in atoms], key=lambda x: x[1], reverse=True)
+
+			#### drawing of molecule
+			for a, d in sorted_atoms:
+				#draw furthest atoms first, then bonds to neighbouring atoms
+				self.draw_atom(draw_surf, a)
+				for b, order in bonds[a].items():
+					if d > cam_dist(b):
+						self.draw_bond(draw_surf, a, b, order)
+
+
+			disp.blit(draw_surf, (0,0))
+			pg.display.update()
+
+
+
+
 
 
 
@@ -409,7 +523,5 @@ if __name__ == '__main__':
 	m = load_mol('hexabenzocoronene')
 	d = Display()
 	d.draw_molecule(m)
-	# [print(b) for b in m.bonds.items()]
-	# [print(a) for a in m.atoms]
 else:
 	structures_folder = os.getcwd() + '\\pkg\\data\\resources\\xyz\\'
