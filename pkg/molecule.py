@@ -11,7 +11,7 @@ try:
 	import screen3D
 except:
 	import pkg.data as data
-	import pkg.screen3D
+	import pkg.screen3D as screen3D
 
 
 
@@ -376,54 +376,93 @@ class Display(screen3D.Screen3D):
 		self.set_projection_plane()
 		
 
-	def draw_bond(self, surf, a1, a2, order, width=3, outline_width=2):
+	def draw_bond(self, surf, a1, a2, order, width=125, outline_width=2):
 		draw_line = pg.draw.line
 		p1, p2 = self.atom_projections[a1], self.atom_projections[a2]
+		m = (p1+p2)/2
+
+		width = int(width/a1.distance_to(self.camera_position))
 
 		if order == 1:
-			draw_line(surf, (255,255,255),p1,p2, width)
+			draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
 
-		if order == 2:
-			d = width
+			draw_line(surf, a1.colour,p1,m, width)
+			draw_line(surf, a2.colour,m,p2, width)
+
+		elif order == 2:
 			poss = np.asarray([p1,p2])
-			perp = poss - poss[0]
-			perp = np.asarray([perp[0], (perp[1][1], -perp[1][0])])[1]
-			perp = d * perp / np.linalg.norm(perp)
+			if not np.array_equal(p1,p2):
+				perp = poss - poss[0]
+				perp = np.asarray([(0,0), (perp[1][1], -perp[1][0])])[1]
+				perp = width * perp / np.linalg.norm(perp)
 
-			draw_line(surf, (255,255,255), p1-perp, p2-perp, width)
-			draw_line(surf, (255,255,255), p1+perp, p2+perp, width)
+				draw_line(surf, self.bkgr_colour, p1, p2, width*3 + outline_width)
+
+				draw_line(surf, a1.colour,p1-perp,m-perp, width)
+				draw_line(surf, a2.colour,m-perp,p2-perp, width)
+
+				draw_line(surf, a1.colour,p1+perp,m+perp, width)
+				draw_line(surf, a2.colour,m+perp,p2+perp, width)
+
+
+		elif order == 3:
+			poss = np.asarray([p1,p2])
+			if not p1 == p2:
+				perp = poss - poss[0]
+				perp = np.asarray([perp[0], (perp[1][1], -perp[1][0])])[1]
+				perp = 2 * width * perp / np.linalg.norm(perp)
+
+				draw_line(surf, self.bkgr_colour, p1, p2, width*6 + outline_width)
+
+				draw_line(surf, a1.colour,p1-perp,m-perp, width)
+				draw_line(surf, a2.colour,m-perp,p2-perp, width)
+
+				draw_line(surf, a1.colour,p1,m, width)
+				draw_line(surf, a2.colour,m,p2, width)
+
+				draw_line(surf, a1.colour,p1+perp,m+perp, width)
+				draw_line(surf, a2.colour,m+perp,p2+perp, width)
+
+		elif order == 1.5:
+			NotImplemented
 
 
 
 	def draw_atom(self, surf, a, size=300, outline_width=2):
 		rad = int(a.covalent_radius/a.distance_to(self.camera_position) * size)
 		p = self.atom_projections[a]
-		pg.draw.circle(surf, (255,255,255), p, rad+outline_width)
+		pg.draw.circle(surf, (0,0,0), p, rad+outline_width)
 		pg.draw.circle(surf, a.colour, p, rad)
 
 
 
-	def handle_events(self, events, screen_params):
+	def handle_events(self, events, keys, screen_params):
 			'''
 			Function that handles events during running
 			'''
+			if keys[pg.K_ESCAPE]:
+				screen_params['run'] = False
+
 			for e in events:
 				if e.type == pg.VIDEORESIZE:
 					self.size = e.dict['size']
 					self.set_projection_plane()
 
-				if e.type == pg.QUIT:
+				elif e.type == pg.QUIT:
 					screen_params['run'] = False
 
-			return screen_params
+
+				elif e.type == pg.MOUSEBUTTONDOWN:
+					if e.button == 4:
+							screen_params['zoom'] = -screen_params['dT'] * self.camera_position[2] * 3
+					elif e.button == 5:
+							screen_params['zoom'] = screen_params['dT'] * self.camera_position[2] * 3
 
 
-	def handle_keys(self, keys, screen_params):
-			'''
-			Function that handles key states during running
-			'''
-			if keys[pg.K_ESCAPE]:
-				screen_params['run'] = False
+			self.camera_position[2] += screen_params['zoom']
+			if self.camera_position[2] > 40: self.camera_position[2] = 40
+			if self.camera_position[2] < 3: self.camera_position[2] = 3
+			screen_params['zoom'] *= 0.95
 
 			return screen_params
 
@@ -447,14 +486,13 @@ class Display(screen3D.Screen3D):
 	def project(self, p):
 		d = self.rotation_matrix @ (p - self.camera_position).T
 		f = self.projection_plane @ d
-		return int(round(f[0]/f[2])), int(round(f[1]/f[2]))
+		return np.asarray((int(round(f[0]/f[2])), int(round(f[1]/f[2]))))
 
 
 	def pre_update(self, screen_params, mol):
 		self.set_rotation_matrix()
 		self.atom_projections = {a:self.project(a.position) for a in mol.atoms}
-		screen_params = self.handle_keys(pg.key.get_pressed(), screen_params)
-		screen_params = self.handle_events(pg.event.get(), screen_params)
+		screen_params = self.handle_events(pg.event.get(), pg.key.get_pressed(), screen_params)
 
 		return screen_params
 
@@ -475,6 +513,7 @@ class Display(screen3D.Screen3D):
 		screen_params['FPS'] = 500
 		screen_params['updt'] = 0
 		screen_params['time'] = 0
+		screen_params['zoom'] = 0
 
 		cam_dist = lambda a: np.linalg.norm(a.position - self.camera_position)
 
@@ -485,15 +524,16 @@ class Display(screen3D.Screen3D):
 		#update loop
 		while screen_params['run']:
 			screen_params['updt'] += 1
-			dT = tick(screen_params['FPS'])/1000
-			screen_params['time'] += dT
+			screen_params['dT'] = tick(screen_params['FPS'])/1000
+			screen_params['time'] += screen_params['dT']
 
 			self.pre_update(screen_params, mol)
 
 			#clear screen
 			draw_surf.fill(self.bkgr_colour)
 
-			mol.rotate((0,.01,0))
+			# mol.rotate((0,.01,0))
+			# self.camera_position = np.array([0,0, 20+10*math.sin(screen_params['time'])])
 
 			#sort atoms by distance to camera and invert
 			sorted_atoms = sorted([(a, cam_dist(a)) for a in atoms], key=lambda x: x[1], reverse=True)
@@ -501,10 +541,12 @@ class Display(screen3D.Screen3D):
 			#### drawing of molecule
 			for a, d in sorted_atoms:
 				#draw furthest atoms first, then bonds to neighbouring atoms
-				self.draw_atom(draw_surf, a)
+				
 				for b, order in bonds[a].items():
 					if d > cam_dist(b):
 						self.draw_bond(draw_surf, a, b, order)
+				self.draw_atom(draw_surf, a)
+
 
 
 			disp.blit(draw_surf, (0,0))

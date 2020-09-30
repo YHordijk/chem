@@ -1,3 +1,6 @@
 import pkg.molecule as mol
 
-print(mol.load_mol('chloropropane'))
+m = mol.load_mol('benzene')
+d = mol.Display()
+d.draw_molecule(m)
+
