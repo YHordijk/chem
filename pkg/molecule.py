@@ -2,17 +2,17 @@ import numpy as np
 import pubchempy as pcp
 import os
 import periodictable as pt
-import pygame as pg
 from math import sin, cos
 import math
 import networkx as nx
+from networkx.algorithms.shortest_paths.generic import shortest_path_length
 
 try:
 	import data
-	import screen3D
+	import display
 except:
 	import pkg.data as data
-	import pkg.screen3D as screen3D
+	import pkg.display as display
 
 
 
@@ -138,6 +138,12 @@ class Atom:
 		return f'{self.element}({self.position[0]:.4f}, {self.position[1]:.4f}, {self.position[2]:.4f})'
 
 
+	def copy(self):
+		a = Atom(self.element, self.position, self.charge)
+		a.hybridisation = self.hybridisation
+		return a
+
+
 	def distance_to(self, p):
 		if type(p) is Atom:
 			return np.linalg.norm(self.position - p.position)
@@ -166,7 +172,7 @@ class Atom:
 
 
 class Molecule:
-	def __init__(self, name=[], elements=[], positions=[], charges=[], atoms=[]):
+	def __init__(self, name=[], elements=[], positions=[], charges=[], atoms=[], bonds=[]):
 		self.name = name
 
 		assert(len(elements) == len(positions))
@@ -183,11 +189,18 @@ class Molecule:
 		self._guess_bond_order_iters = 0
 
 		if len(self.atoms) < 200:
-			self.bonds = self.guess_bond_orders()
+			if bonds == []:
+				self.bonds = self.guess_bond_orders()
+			else:
+				self.bonds={self.atoms[a1]: {self.atoms[a2]: order  for a2, order in b.items()} for a1, b in bonds.items()}
 
 			self.unique_bonds = self.get_unique_bonds()
+			self.graph_representation = self.get_graph_representation()
+			self.unique_pairs = self.get_unique_atom_pairs()
+			self.unique_pairs_3 = self.get_unique_atom_pairs(3) #used in forcefields, vdw forces are usually taken only for atoms >= 3 bonds apart
 			self.unique_bond_angles = self.get_unique_bond_angles()
 			self.unique_torsion_angles = self.get_unique_torsion_angles()
+			
 			self.rings = self.detect_rings()
 		else:
 			self.bonds = self.initial_bonding()
@@ -205,7 +218,16 @@ class Molecule:
 		return string
 
 
+	def copy(self):
+		return Molecule(self.name, atoms=[a.copy() for a in self.atoms], bonds={self.atoms.index(a1): {self.atoms.index(a2): order  for a2, order in b.items()} for a1, b in self.bonds.items()})
+
+
 	#### MOLECULE MANIPULATION
+	def apply_gradient(self, grad, strength=1):
+		for atom, grad in grad.items():
+			atom.position = atom.position - grad * strength
+
+
 	def rotate(self, rotation):
 		r = rotation[0]
 		Rx = np.array(([	  1, 	  0,	   0],
@@ -281,6 +303,23 @@ class Molecule:
 		self.atoms = a
 
 
+	def shake(self, strength):
+		for atom in self.atoms:
+			atom.position = atom.position + strength * np.random.randn(3)
+
+
+	def get_graph_representation(self):
+		g = nx.Graph()
+		g.add_nodes_from(self.atoms)
+		#bonds are given as a1, a2, order so only get index 0 and 1
+		g.add_edges_from([b[0:2] for b in self.unique_bonds])
+
+		return g
+
+	def bond_distance(self, a1, a2):
+		return shortest_path_length(self.graph_representation, a1, a2)
+
+
 	#### BONDING FUNCTIONS	
 	def get_unique_bonds(self):
 		unique_bonds = []
@@ -321,7 +360,7 @@ class Molecule:
 		return np.arccos((u @ v) / (mag(u) * mag(v))) * (1, 180/np.pi)[in_degrees]
 
 
-	def get_unique_torsion_angles(self, in_degrees=False):
+	def get_unique_torsion_angles(self, in_degrees=True):
 		'''
 		Method that yields all unique torsion angles in the molecule along with the atoms over which the torsion angle is calculated.
 		'''
@@ -336,8 +375,10 @@ class Molecule:
 							prev_angles.append(sorted_atoms)
 							unique_torsion_angles.append((a1, a2, a3, a4))
 
+		return unique_torsion_angles
 
-	def torsion_angle(self, a1, a2, a3, a4, in_degrees=False):
+
+	def torsion_angle(self, a1, a2, a3, a4, in_degrees=True):
 		'''
 		Method that returns the torsion angle or dihedral angle of the 
 		a1 -- a2 -- a3 and a2 -- a3 -- a4 planes.
@@ -355,6 +396,19 @@ class Molecule:
 		b3 = a4.position - a3.position
 
 		return math.atan2(np.dot(np.cross(np.cross(b1, b2), np.cross(b2, b3)), b2/np.linalg.norm(b2)), np.dot(np.cross(b1, b2), np.cross(b2, b3)))
+
+
+	def get_unique_atom_pairs(self, min_bond_distance=0):
+		unique_pairs = []
+		for i in range(len(self.atoms)):
+			for j in range(i+1, len(self.atoms)):
+				if min_bond_distance > 0:
+					if self.bond_distance(self.atoms[i], self.atoms[j]) >= min_bond_distance:
+						unique_pairs.append(tuple(sorted((self.atoms[i], self.atoms[j]), key=id)))
+				elif min_bond_distance == 0:
+					unique_pairs.append(tuple(sorted((self.atoms[i], self.atoms[j]), key=id)))
+
+		return unique_pairs
 
 
 
@@ -375,7 +429,11 @@ class Molecule:
 		return bonds
 
 
-	def guess_bond_orders(self, max_iters=2):
+	def get_bond_order(self, a1, a2):
+		return self.bonds[a1][a2]
+
+
+	def guess_bond_orders(self, max_iters=100):
 		'''
 		Method that guesses the bond orders of the molecule.
 		
@@ -425,10 +483,7 @@ class Molecule:
 
 		### algorithm
 		#loop over the elements and valences 
-		i =0
 		for num, val in valences:
-			i += 1
-			print(i)
 			#get all atoms of element
 			curr_atoms = self.get_atoms_by_number(num)
 			np.random.shuffle(curr_atoms)
@@ -475,13 +530,9 @@ class Molecule:
 		'''
 
 		#create a graph first
-		g = nx.Graph()
 
-		g.add_nodes_from(self.atoms)
-		#bonds are given as a1, a2, order so only get index 0 and 1
-		g.add_edges_from([b[0:2] for b in self.unique_bonds])
 		#get the cycles
-		cycles = nx.algorithms.cycles.minimum_cycle_basis(g)
+		cycles = nx.algorithms.cycles.minimum_cycle_basis(self.graph_representation)
 
 		self.rings = []
 		for cycle in cycles:
@@ -509,228 +560,27 @@ class Molecule:
 					else:
 						atom.ring = 'NO'
 
+	
+
 			
+# class MoleculeCopy:
+# 	def __init__(self, mol):
+# 		self.name = mol.name
+# 		self.positions = [a.position for a in mol.atoms]
+# 		self.elements = [a.element for a in mol.atoms]
+# 		self.atom_number = [a.atom_number for a in mol.atoms]
 
-##### ========================================== DISPLAY CLASS ========================================== ####
+# 		self.atoms = [Atom(self.elements[i], self.positions[i]) for i in range(len(self.elements))]
+# 		self.bonds = [(mol.atoms.index()) for b in mol.bonds]
 
-class Display(screen3D.Screen3D):
-	def __init__(self, size=(1280,720), camera_position=np.array([0.,0.,20.]), camera_orientation=(0.,0.,0.), project_type="perspective", bkgr_colour=(0,0,0)):
-		self.camera_position = np.asarray(camera_position)
-		self.camera_orientation = np.asarray(camera_orientation)
-		self.project_type = project_type
-		self.bkgr_colour = bkgr_colour
-			
-		self._size = self.width, self.height = size
-		self.set_projection_plane()
-		
+# 	def __repr__(self):
+# 		string = ''
+# 		string += self.name + '\n'
 
-	def draw_bond(self, surf, a1, a2, order, width=125, outline_width=3):
-		draw_line = pg.draw.line
-		p1, p2 = self.atom_projections[a1], self.atom_projections[a2]
-		m = (p1+p2)/2
+# 		for e, p in zip(self.elements, self.positions):
+# 			string += f'{e:2s}\t{p[0]: .5f}\t{p[1]: .5f}\t{p[2]: .5f}\n'
 
-		width = int(width/a1.distance_to(self.camera_position))
-
-		if order == 1:
-			draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
-
-			draw_line(surf, a1.colour,p1,m, width)
-			draw_line(surf, a2.colour,m,p2, width)
-
-		elif order == 2:
-			poss = np.asarray([p1,p2])
-			if not np.array_equal(p1,p2):
-				perp = poss - poss[0]
-				perp = np.asarray([(0,0), (perp[1][1], -perp[1][0])])[1]
-				perp = width * perp / np.linalg.norm(perp)
-
-				draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
-				draw_line(surf, a1.colour,p1-perp,m-perp, width)
-				draw_line(surf, a2.colour,m-perp,p2-perp, width)
-
-				draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
-				draw_line(surf, a1.colour,p1+perp,m+perp, width)
-				draw_line(surf, a2.colour,m+perp,p2+perp, width)
-
-
-		elif order == 3:
-			poss = np.asarray([p1,p2])
-			if not np.array_equal(p1,p2):
-				perp = poss - poss[0]
-				perp = np.asarray([perp[0], (perp[1][1], -perp[1][0])])[1]
-				perp = 1.5 * width * perp / np.linalg.norm(perp)
-
-				draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
-				draw_line(surf, a1.colour,p1-perp,m-perp, width)
-				draw_line(surf, a2.colour,m-perp,p2-perp, width)
-
-				draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
-				draw_line(surf, a1.colour,p1,m, width)
-				draw_line(surf, a2.colour,m,p2, width)
-
-				draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
-				draw_line(surf, a1.colour,p1+perp,m+perp, width)
-				draw_line(surf, a2.colour,m+perp,p2+perp, width)
-
-		elif order == 1.5:
-			NotImplemented
-
-
-
-	def draw_atom(self, surf, a, size=300, outline_width=2):
-		rad = int(a.covalent_radius/a.distance_to(self.camera_position) * size)
-		p = self.atom_projections[a]
-		pg.draw.circle(surf, self.bkgr_colour, p, rad+outline_width)
-		pg.draw.circle(surf, a.colour, p, rad)
-
-
-
-	def handle_events(self, events, keys, screen_params):
-			'''
-			Function that handles events during running
-			'''
-			if keys[pg.K_ESCAPE]:
-				screen_params['run'] = False
-
-			for e in events:
-				if e.type == pg.VIDEORESIZE:
-					self.size = e.dict['size']
-					self.set_projection_plane()
-
-				elif e.type == pg.QUIT:
-					screen_params['run'] = False
-
-
-				elif e.type == pg.MOUSEBUTTONDOWN:
-					if e.button == 4:
-							screen_params['zoom'] = -screen_params['dT'] * self.camera_position[2] * 3
-					elif e.button == 5:
-							screen_params['zoom'] = screen_params['dT'] * self.camera_position[2] * 3
-
-
-			move = pg.mouse.get_rel()
-			if keys[pg.K_LCTRL] or keys[pg.K_RCTRL]:
-				if pg.mouse.get_pressed()[2]:
-						self.camera_position[0] += move[0]/50
-						self.camera_position[1] += move[1]/50
-
-				if pg.mouse.get_pressed()[0]:
-					screen_params['rot'] = np.array([move[1]/150, -move[0]/150, 0])
-
-			screen_params['mol'].rotate(screen_params['rot'])
-			screen_params['rot'] = screen_params['rot'] * 0.8
-
-
-			self.camera_position[2] += screen_params['zoom']
-			if self.camera_position[2] > 40: self.camera_position[2] = 40
-			if self.camera_position[2] < 3: self.camera_position[2] = 3
-			screen_params['zoom'] *= 0.8
-
-			return screen_params
-
-
-	def set_rotation_matrix(self):
-		t = self.camera_orientation
-
-		x_rot_mat = np.array([[1,0,0], [0, cos(t[0]), sin(t[0])], [0, -sin(t[0]), cos(t[0])]])
-		y_rot_mat = np.array([[cos(t[1]), 0, -sin(t[1])], [0,1,0], [sin(t[1]), 0, cos(t[1])]])
-		z_rot_mat = np.array([[cos(t[2]), sin(t[2]), 0], [-sin(t[2]), cos(t[2]), 0], [0,0,1]])
-		z_rot_mat = np.array([[1,0,0], [0,1,0], [0,0,1]])
-
-		self.rotation_matrix = x_rot_mat @ y_rot_mat @ z_rot_mat
-
-
-	def set_projection_plane(self):
-		e = np.array([self.width/2, self.height/2, 600])
-		self.projection_plane = np.array([[1, 0, e[0]/e[2]], [0, 1, e[1]/e[2]], [0, 0, 1/e[2]]])
-
-
-	def project(self, p):
-		d = self.rotation_matrix @ (p - self.camera_position).T
-		f = self.projection_plane @ d
-		return np.asarray((int(round(f[0]/f[2])), int(round(f[1]/f[2]))))
-
-
-	def pre_update(self, screen_params, mol):
-		self.set_rotation_matrix()
-		self.atom_projections = {a:self.project(a.position) for a in mol.atoms}
-		screen_params = self.handle_events(pg.event.get(), pg.key.get_pressed(), screen_params)
-
-		return screen_params
-
-
-	def draw_molecule(self, mol, draw_hydrogens=True, draw_atoms=True):
-		'''
-		Method that draws and displays the provided molecule
-		'''
-		disp = pg.display.set_mode(self.size, pg.locals.HWSURFACE | pg.locals.DOUBLEBUF | pg.locals.RESIZABLE)
-		draw_surf = pg.surface.Surface(self.size)
-
-		clock = pg.time.Clock()
-		tick = clock.tick_busy_loop
-
-		#set parameters for the screen
-		screen_params = {}
-		screen_params['run'] = True
-		screen_params['FPS'] = 500
-		screen_params['updt'] = 0
-		screen_params['time'] = 0
-		screen_params['zoom'] = 0
-		screen_params['move'] = (0,0)
-		screen_params['rot'] = np.array([0,0,0])
-		screen_params['mol'] = mol
-		screen_params['draw_hydrogens'] = draw_hydrogens
-		screen_params['draw_atoms'] = draw_atoms
-
-		cam_dist = lambda a: np.linalg.norm(a.position - self.camera_position)
-
-		atoms = mol.atoms
-		bonds = mol.bonds
-
-		#update loop
-		while screen_params['run']:
-			screen_params['updt'] += 1
-			screen_params['dT'] = tick(screen_params['FPS'])/1000
-			screen_params['time'] += screen_params['dT']
-
-			self.pre_update(screen_params, mol)
-
-			#clear screen
-			draw_surf.fill(self.bkgr_colour)
-
-			# mol.rotate((0,.01,0))
-			# self.camera_position = np.array([0,0, 20+10*math.sin(screen_params['time'])])
-
-			#sort atoms by distance to camera and invert
-			sorted_atoms = sorted([(a, cam_dist(a)) for a in atoms], key=lambda x: x[1], reverse=True)
-
-			#### drawing of molecule
-
-			for a, d in sorted_atoms:
-				#draw furthest atoms first, then bonds to neighbouring atoms
-				if screen_params['draw_hydrogens']:
-					for b, order in bonds[a].items():
-						if d > cam_dist(b):
-							self.draw_bond(draw_surf, a, b, order)
-					if screen_params['draw_atoms']:
-						self.draw_atom(draw_surf, a)
-
-				else:
-					if a.element == 'H':
-						continue
-					for b, order in bonds[a].items():
-						if d > cam_dist(b) and not b.element == 'H':
-							self.draw_bond(draw_surf, a, b, order)
-					if screen_params['draw_atoms']:
-						self.draw_atom(draw_surf, a)
-
-
-			disp.blit(draw_surf, (0,0))
-			pg.display.update()
-
-
-
-
+# 		return string
 
 
 
@@ -739,7 +589,7 @@ class Display(screen3D.Screen3D):
 if __name__ == '__main__':
 	structures_folder = os.getcwd() + '\\data\\resources\\xyz\\'
 	m = load_mol('benzene')
-	d = Display()
+	d = display.Display()
 	# d.draw_molecule(m)
 else:
 	structures_folder = os.getcwd() + '\\pkg\\data\\resources\\xyz\\'
