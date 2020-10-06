@@ -23,6 +23,14 @@ def minimize_molecule(self, mol, force_field='UFF'):
 
 
 
+class IMUFF:
+	def __init__(self, *args, **kwargs):
+		self.parameters = data.FF_UFF_PARAMETERS
+		self.optimal_bond_lengths = {}
+
+
+
+
 class UFF():
 	'''
 	RESOURCES:
@@ -69,59 +77,97 @@ class UFF():
 			grad[a1] = grad[a1] + kIJ * (r - rIJ) * a1.position / r
 			grad[a2] = grad[a2] + kIJ * (r - rIJ) * a2.position / r
 
+		# for a1, a2, a3 in mol.unique_bond_angles:
+		# 	try:
+		# 		a1t, a2t, a3t = a1.uff_atom_type, a2.uff_atom_type, a3.uff_atom_type
+		# 		u = a1.position - a2.position
+		# 		v = a3.position - a2.position
+
+		# 		g = (u @ v) / (np.linalg.norm(u) * np.linalg.norm(v))
+		# 		if g**2 > 1:
+		# 			print(g**2)
+		# 		theta = np.arccos(g)
+
+		# 		mu, mv = np.sqrt(u @ u), np.sqrt(v @ v)
+
+		# 		dmda1 = -1/(u * mu * mv)
+		# 		dmda3 = -1/(v * mu * mv)
+		# 		dmda2 = -dmda1 - dmda3
+
+		# 		dgda1 = v/dmda1
+		# 		dgda2 = (a2.position @ a2.position - a1.position - a3.position)*dmda2
+		# 		dgda3 = u/dmda3
+		# 		dtdg = -1/sqrt(1-g**2)
+		# 		dtda1 = dtdg * dgda1
+		# 		dtda2 = dtdg * dgda2
+		# 		dtda3 = dtdg * dgda3
+
+		# 		theta0 = params['valence_angle'][a2t] * math.pi/180
+		# 		costheta0 = cos(theta0)
+		# 		sintheta0 = sin(theta0)
+
+		# 		r12 = self.optimal_bond_lengths[tuple(sorted((a1t, a2t)))]
+		# 		r12_2 = r12 * r12 #squared
+		# 		r23 = self.optimal_bond_lengths[tuple(sorted((a2t, a3t)))]
+		# 		r23_2 = r23 * r23
+		# 		r1223 = r12 * r23
+		# 		r13 = sqrt(r12_2 + r23_2 - 2 * r1223 * cos(theta))
+
+		# 		Z1, Z3 = params['effective_charge'][a1t], params['effective_charge'][a3t]
+
+		# 		beta = 664.12/r1223
+
+		# 		KIJK = beta * (Z1*Z3/r13**5) * r1223 * (3*r1223 * (1 - costheta0**2) - r13**2 * costheta0)
+
+		# 		C2 = 1/(4*sintheta0**2)
+		# 		C1 = -4 * C2 * costheta0
+
+		# 		f = (KIJK*C1*sin(theta) + 2*KIJK*C2*sin(2*theta))
+		# 		grad[a1] = grad[a1] - f *dtda1
+		# 		grad[a2] = grad[a2] - f *dtda2
+		# 		grad[a3] = grad[a3] - f *dtda3
+		# 	except:
+		# 		print(u, v)
+		# 		raise
+
 		for a1, a2, a3 in mol.unique_bond_angles:
-			try:
-				a1t, a2t, a3t = a1.uff_atom_type, a2.uff_atom_type, a3.uff_atom_type
-				u = a1.position - a2.position
-				v = a3.position - a2.position
+			a1t, a2t, a3t = a1.uff_atom_type, a2.uff_atom_type, a3.uff_atom_type
+			u = a1.position - a2.position
+			v = a3.position - a2.position
 
-				g = (u @ v) / (np.linalg.norm(u) * np.linalg.norm(v))
-				if g**2 > 1:
-					print(g**2)
-				theta = np.arccos(g)
+			mu, mv = np.sqrt(u @ u), np.sqrt(v @ v)
 
-				mu, mv = np.sqrt(u @ u), np.sqrt(v @ v)
+			g = (u @ v) / (mu * mv)
+			theta = np.arccos(g)
 
-				dmda1 = -1/(u * mu * mv)
-				dmda3 = -1/(v * mu * mv)
-				dmda2 = -dmda1 - dmda3
 
-				dgda1 = v/dmda1
-				dgda2 = (a2.position @ a2.position - a1.position - a3.position)*dmda2
-				dgda3 = u/dmda3
-				dtdg = -1/sqrt(1-g**2)
-				dtda1 = dtdg * dgda1
-				dtda2 = dtdg * dgda2
-				dtda3 = dtdg * dgda3
+			#GET C2 and C1
+			theta0 = params['valence_angle'][a2t] * math.pi/180
+			costheta0 = cos(theta0)
+			sintheta0 = sin(theta0)
 
-				theta0 = params['valence_angle'][a2t] * math.pi/180
-				costheta0 = cos(theta0)
-				sintheta0 = sin(theta0)
+			r12 = self.optimal_bond_lengths[tuple(sorted((a1t, a2t)))]
+			r12_2 = r12 * r12 #squared
+			r23 = self.optimal_bond_lengths[tuple(sorted((a2t, a3t)))]
+			r23_2 = r23 * r23
+			r1223 = r12 * r23
+			r13 = sqrt(r12_2 + r23_2 - 2 * r1223 * cos(theta))
 
-				r12 = self.optimal_bond_lengths[tuple(sorted((a1t, a2t)))]
-				r12_2 = r12 * r12 #squared
-				r23 = self.optimal_bond_lengths[tuple(sorted((a2t, a3t)))]
-				r23_2 = r23 * r23
-				r1223 = r12 * r23
-				r13 = sqrt(r12_2 + r23_2 - 2 * r1223 * cos(theta))
+			Z1, Z3 = params['effective_charge'][a1t], params['effective_charge'][a3t]
 
-				Z1, Z3 = params['effective_charge'][a1t], params['effective_charge'][a3t]
+			beta = 664.12/r1223
 
-				beta = 664.12/r1223
+			KIJK = beta * (Z1*Z3/r13**5) * r1223 * (3*r1223 * (1 - costheta0**2) - r13**2 * costheta0)
 
-				KIJK = beta * (Z1*Z3/r13**5) * r1223 * (3*r1223 * (1 - costheta0**2) - r13**2 * costheta0)
+			C2 = 1/(4*sintheta0**2)
+			C1 = -4 * C2 * costheta0
 
-				C2 = 1/(4*sintheta0**2)
-				C1 = -4 * C2 * costheta0
+			f = (KIJK*C1*sin(theta) + 2*KIJK*C2*sin(2*theta))
 
-				f = (KIJK*C1*sin(theta) + 2*KIJK*C2*sin(2*theta))
-				grad[a1] = grad[a1] - f *dtda1
-				grad[a2] = grad[a2] - f *dtda2
-				grad[a3] = grad[a3] - f *dtda3
-			except:
-				print(u, v)
-				raise
 
+			#GET DERIVATIVE
+			muv = mu*mv
+			grad[a2] = grad[a2] + f * ( 1/math.sqrt(1-g**2) * ((v/2 + u/2)/(muv) - (v*mu**2/2 + u*mv**2/2)/(muv**3)) )
 
 		return grad
 
