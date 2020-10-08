@@ -19,7 +19,7 @@ class Display:
 		self.set_projection_plane()
 		
 
-	def draw_bond(self, surf, a1, a2, order, width=125, outline_width=3):
+	def draw_bond(self, surf, a1, a2, order, width=125, outline_width=3, draw_background=False):
 		draw_line = pg.draw.line
 		p1, p2 = self.atom_projections[a1], self.atom_projections[a2]
 		m = (p1+p2)/2
@@ -27,10 +27,11 @@ class Display:
 		width = int(width/a1.distance_to(self.camera_position))
 
 		if order == 1:
-			# draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
-
-			draw_line(surf, a1.colour,p1,m, width)
-			draw_line(surf, a2.colour,m,p2, width)
+			if draw_background:
+				draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
+			else:
+				draw_line(surf, a1.colour,p1,m, width)
+				draw_line(surf, a2.colour,m,p2, width)
 
 		elif order == 2:
 			poss = np.asarray([p1,p2])
@@ -38,14 +39,18 @@ class Display:
 				perp = poss - poss[0]
 				perp = np.asarray([(0,0), (perp[1][1], -perp[1][0])])[1]
 				perp = width * perp / np.linalg.norm(perp)
+				
+				if draw_background:
+					draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
+				else:
+					draw_line(surf, a1.colour,p1-perp,m-perp, width)
+					draw_line(surf, a2.colour,m-perp,p2-perp, width)
 
-				# draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
-				draw_line(surf, a1.colour,p1-perp,m-perp, width)
-				draw_line(surf, a2.colour,m-perp,p2-perp, width)
-
-				# draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
-				draw_line(surf, a1.colour,p1+perp,m+perp, width)
-				draw_line(surf, a2.colour,m+perp,p2+perp, width)
+				if draw_background:
+					draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
+				else:
+					draw_line(surf, a1.colour,p1+perp,m+perp, width)
+					draw_line(surf, a2.colour,m+perp,p2+perp, width)
 
 
 		elif order == 3:
@@ -53,20 +58,26 @@ class Display:
 			if not np.array_equal(p1,p2):
 				perp = poss - poss[0]
 				perp = np.asarray([perp[0], (perp[1][1], -perp[1][0])])[1]
-				perp = 1.2 * width * perp / np.linalg.norm(perp)
+				perp = 1.5 * width * perp / np.linalg.norm(perp)
 				width = round(width/1.5)
+				
+				if draw_background:
+					draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
+				else:
+					draw_line(surf, a1.colour,p1-perp,m-perp, width)
+					draw_line(surf, a2.colour,m-perp,p2-perp, width)
 
-				# draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
-				draw_line(surf, a1.colour,p1-perp,m-perp, width)
-				draw_line(surf, a2.colour,m-perp,p2-perp, width)
+				if draw_background:
+					draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
+				else:
+					draw_line(surf, a1.colour,p1,m, width)
+					draw_line(surf, a2.colour,m,p2, width)
 
-				# draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
-				draw_line(surf, a1.colour,p1,m, width)
-				draw_line(surf, a2.colour,m,p2, width)
-
-				# draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
-				draw_line(surf, a1.colour,p1+perp,m+perp, width)
-				draw_line(surf, a2.colour,m+perp,p2+perp, width)
+				if draw_background:
+					draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
+				else:
+					draw_line(surf, a1.colour,p1+perp,m+perp, width)
+					draw_line(surf, a2.colour,m+perp,p2+perp, width)
 
 		elif order == 1.5:
 			NotImplemented
@@ -210,9 +221,12 @@ class Display:
 				if screen_params['draw_hydrogens']:
 					for b, order in bonds[a].items():
 						if d > cam_dist(b):
-							self.draw_bond(self.draw_surf, a, b, order)
+							self.draw_bond(self.draw_surf, a, b, order, draw_background=True)
 					if screen_params['draw_atoms']:
 						self.draw_atom(self.draw_surf, a)
+					for b, order in bonds[a].items():
+						if d > cam_dist(b):
+							self.draw_bond(self.draw_surf, a, b, order, draw_background=False)
 
 				else:
 					if a.element == 'H':
