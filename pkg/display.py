@@ -27,7 +27,7 @@ class Display:
 		width = int(width/a1.distance_to(self.camera_position))
 
 		if order == 1:
-			draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
+			# draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
 
 			draw_line(surf, a1.colour,p1,m, width)
 			draw_line(surf, a2.colour,m,p2, width)
@@ -39,11 +39,11 @@ class Display:
 				perp = np.asarray([(0,0), (perp[1][1], -perp[1][0])])[1]
 				perp = width * perp / np.linalg.norm(perp)
 
-				draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
+				# draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
 				draw_line(surf, a1.colour,p1-perp,m-perp, width)
 				draw_line(surf, a2.colour,m-perp,p2-perp, width)
 
-				draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
+				# draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
 				draw_line(surf, a1.colour,p1+perp,m+perp, width)
 				draw_line(surf, a2.colour,m+perp,p2+perp, width)
 
@@ -53,17 +53,18 @@ class Display:
 			if not np.array_equal(p1,p2):
 				perp = poss - poss[0]
 				perp = np.asarray([perp[0], (perp[1][1], -perp[1][0])])[1]
-				perp = 1.5 * width * perp / np.linalg.norm(perp)
+				perp = 1.2 * width * perp / np.linalg.norm(perp)
+				width = round(width/1.5)
 
-				draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
+				# draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
 				draw_line(surf, a1.colour,p1-perp,m-perp, width)
 				draw_line(surf, a2.colour,m-perp,p2-perp, width)
 
-				draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
+				# draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
 				draw_line(surf, a1.colour,p1,m, width)
 				draw_line(surf, a2.colour,m,p2, width)
 
-				draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
+				# draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
 				draw_line(surf, a1.colour,p1+perp,m+perp, width)
 				draw_line(surf, a2.colour,m+perp,p2+perp, width)
 
@@ -75,7 +76,7 @@ class Display:
 	def draw_atom(self, surf, a, size=300, outline_width=2):
 		rad = int(a.covalent_radius/a.distance_to(self.camera_position) * size)
 		p = self.atom_projections[a]
-		pg.draw.circle(surf, self.bkgr_colour, p, rad+outline_width)
+		# pg.draw.circle(surf, self.bkgr_colour, p, rad+outline_width)
 		pg.draw.circle(surf, a.colour, p, rad)
 
 
@@ -89,8 +90,9 @@ class Display:
 
 			for e in events:
 				if e.type == pg.VIDEORESIZE:
-					self.size = e.dict['size']
+					self.size = self.width, self.height = e.dict['size']
 					self.draw_surf = pg.transform.scale(self.draw_surf, self.size)
+					screen_params['disp'] = pg.display.set_mode(self.size, pg.locals.HWSURFACE | pg.locals.DOUBLEBUF | pg.locals.RESIZABLE)
 					self.set_projection_plane()
 
 				elif e.type == pg.QUIT:
@@ -159,7 +161,7 @@ class Display:
 		'''
 		Method that draws and displays the provided molecule
 		'''
-		disp = pg.display.set_mode(self.size, pg.locals.HWSURFACE | pg.locals.DOUBLEBUF | pg.locals.RESIZABLE)
+		
 		self.draw_surf = pg.surface.Surface(self.size)
 
 		clock = pg.time.Clock()
@@ -174,9 +176,10 @@ class Display:
 		screen_params['zoom'] = 0
 		screen_params['move'] = (0,0)
 		screen_params['rot'] = np.array([0,0,0])
-		screen_params['mol'] = mol
+		screen_params['mols'] = [mol]
 		screen_params['draw_hydrogens'] = draw_hydrogens
 		screen_params['draw_atoms'] = draw_atoms
+		screen_params['disp'] = pg.display.set_mode(self.size, pg.locals.HWSURFACE | pg.locals.DOUBLEBUF | pg.locals.RESIZABLE)
 
 		cam_dist = lambda a: np.linalg.norm(a.position - self.camera_position)
 
@@ -220,7 +223,7 @@ class Display:
 					if screen_params['draw_atoms']:
 						self.draw_atom(draw_surf, a)
 
-			disp.blit(self.draw_surf, (0,0))
+			screen_params['disp'].blit(self.draw_surf, (0,0))
 			pg.display.update()
 
 
