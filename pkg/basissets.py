@@ -128,18 +128,22 @@ def contracted_basis(basis, atom_number, n, l, ml):
 
 b = load_basis('STO-4G')
 
+
+
 C_2s  = contracted_basis(b, 8, 2, 0,  0)
 C_2px = contracted_basis(b, 8, 2, 1, -1)
 C_2py = contracted_basis(b, 8, 2, 1,  0)
 C_2pz = contracted_basis(b, 8, 2, 1,  1)
 
 
+print(C_2pz(0,0,0))
+
 
 dims = (600,600,1)
 dims_prod = dims[0]*dims[1]*dims[2]
 ranges = ((-5,5),(-5,5),(0,0))
 X,Y = np.meshgrid(np.linspace(*ranges[0],dims[0]), np.linspace(*ranges[1],dims[1]))
-Z = np.ones(dims_prod) * 5
+Z = np.ones(dims_prod) * 0
 
 
 X = X.reshape(dims_prod,1)
