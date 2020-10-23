@@ -1,4 +1,3 @@
-
 import os
 
 def csv_to_dict(file):
@@ -16,6 +15,8 @@ def csv_to_dict(file):
 RESOURCES_DIR = os.getcwd() + r'\pkg\data\resources'
 if  not os.path.exists(RESOURCES_DIR):
 	RESOURCES_DIR = os.getcwd() + r'\data\resources'
+
+BASIS_SET_DIR = rf'{RESOURCES_DIR}\basissets'
 
 #element parameters
 MAX_PRINCIPAL_QUANTUM_NUMBER = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_quantum_number.csv')
@@ -59,3 +60,11 @@ def load_uff_parameters(path):
 
 
 FF_UFF_PARAMETERS = load_uff_parameters(rf'{RESOURCES_DIR}\forcefields\UFF\UFF.prm')
+
+
+def get_basis_file(name, extension='json'):
+	f = rf'{BASIS_SET_DIR}\{name}.{extension}'
+	assert(os.path.exists(f))
+	return f
+
+# print(get_basis_file('STO-4G'))

@@ -10,9 +10,11 @@ from networkx.algorithms.shortest_paths.generic import shortest_path_length
 try:
 	import data
 	import display
+	import basissets
 except:
 	import pkg.data as data
 	import pkg.display as display
+	import pkg.basissets as basissets
 
 
 
@@ -29,13 +31,13 @@ def load_from_file(file):
 	return Molecule(name, elements, positions)
 
 
-def get_from_pubchem(name):
+def get_from_pubchem(name, record_type='3d'):
 	try:
 		name = int(name)
 	except:
 		pass
 
-	mol = pcp.get_compounds(name, ('name', 'cid')[type(name) is int], record_type='3d')
+	mol = pcp.get_compounds(name, ('name', 'cid')[type(name) is int], record_type=record_type)
 	if len(mol) == 0:
 		print(f'No compound or 3d structure with name {name} found on Pubchem. Please try again with CID.')
 		return 
@@ -53,7 +55,7 @@ def get_from_pubchem(name):
 	return mol
 
 
-def find_mol(name, root=None, exact=True):
+def find_mol(name, root=None, exact=True, record_type='3d'):
 	'''
 	Function that returns the path to a file in a folder in root or on pubchem
 	If found on pubchem, save to root
@@ -81,12 +83,10 @@ def find_mol(name, root=None, exact=True):
 		return paths[0]
 
 	#if not found, search pubchem
-	if get_from_pubchem(name) is None:
+	if get_from_pubchem(name, record_type=record_type) is None:
 		return
 
 	return find_mol(name, root=root)
-
-
 
 
 def save_to_xyz(mol, path, comment=''):
@@ -111,9 +111,12 @@ def save_to_xyz(mol, path, comment=''):
 	print(f'Saved {mol.name} to {path}.')
 
 
-def load_mol(name):
-	path = find_mol(name.capitalize())
-	mol = load_from_file(path)
+def load_mol(name, redownload=False, record_type='3d'):
+	if redownload:
+		mol = get_from_pubchem(name, record_type=record_type)
+	else:
+		path = find_mol(name.capitalize())
+		mol = load_from_file(path)
 	return mol
 
 
@@ -222,6 +225,21 @@ class Molecule:
 		return Molecule(self.name, atoms=[a.copy() for a in self.atoms], bonds={self.atoms.index(a1): {self.atoms.index(a2): order  for a2, order in b.items()} for a1, b in self.bonds.items()})
 
 
+	#### BASIS SET FUNCTIONS
+	def set_basis_set(self, basis_name):
+		self.basis_set = basissets.load_basis(basis_name)
+
+
+	def evaluate_basis_set(self, p):
+		b = self.basis_set['elements']
+		for a in self.atoms:
+			z = a.atom_number
+			ce = b[str(z)]['electron_shells'][-1]
+			l = ce['angular_momentum']
+			print(l)
+			coeff = ce['']
+
+
 	#### MOLECULE MANIPULATION
 	def apply_gradient(self, grad, strength=1):
 		for atom, grad in grad.items():
@@ -260,6 +278,26 @@ class Molecule:
 		p = np.asarray(p)
 		for a in self.atoms:
 			a.position -= p
+
+
+	def get_corners(self):
+		mini = np.asarray([min(a.position[0] for a in self.atoms), min(a.position[1] for a in self.atoms), min(a.position[2] for a in self.atoms)])
+		maxi = np.asarray([max(a.position[0] for a in self.atoms), max(a.position[1] for a in self.atoms), max(a.position[2] for a in self.atoms)])
+		return mini, maxi
+
+
+	def get_dimensions(self):
+		'''
+		Method that returns the dimensions of a square encompassing the molecule
+		'''
+		#get bottom left
+		mini, maxi = self.get_corners()
+		return maxi - mini
+
+
+	def get_center(self):
+		mini, maxi = self.get_corners()
+		return mini + (maxi-mini)/2
 
 
 	#### UTILITY FUNCTIONS
