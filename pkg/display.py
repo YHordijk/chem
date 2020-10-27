@@ -7,6 +7,8 @@ import math
 import mcubes
 from time import perf_counter as pc
 
+import pkg.colour_maps as cmap
+
 
 
 ##### ========================================== DISPLAY CLASS ========================================== ####
@@ -175,6 +177,21 @@ class Display:
 		return np.asarray((int(round(f[0]/f[2])), int(round(f[1]/f[2]))))
 
 
+	def project_array(self, array):
+		#accepts array in the form:
+		'''
+		array = [x0, y0, z0]
+				[x1, y1, z1]
+					...
+				[xn, yn, zn]
+		'''
+
+		d = self.rotation_matrix @ (array - self.camera_position).T
+		f = self.projection_plane @ d
+
+		return np.vstack((f[0]/f[2], f[1]/f[2])).T.astype(int)
+
+
 	def pre_update(self, params):
 		self.set_rotation_matrix()
 		self.atom_projections = {a:self.project(a.position) for a in params['mols'][0].atoms}
@@ -190,6 +207,15 @@ class Display:
 
 	def update(self, params):
 		pass
+
+
+	def draw_3dpoints(self, params, P, array, colour_map=cmap.BlueRed()):
+		# a = colour_map.get_colour(a)
+
+		projected_a = self.project_array(P)
+		surf = params['draw_surf']
+		r = lambda x: int(float(x)**2*10)
+		[pg.draw.circle(surf, ((0,0,255), (255,0,0))[float(a)<0], p, 3) for a, p in zip(array, projected_a) if r(a)>0]
 
 
 	def draw_mesh(self, params, mesh, fill=True):

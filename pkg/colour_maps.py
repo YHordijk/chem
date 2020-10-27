@@ -91,12 +91,19 @@ def get_cmap_classes():
 
 
 
+class BlueWhite(ColourMap):
+	colours = [
+	(0,0,255),
+	(255,255,255),
+	]
+
 
 class BlueRed(ColourMap):
 	colours = [
 	(0,0,255),
 	(255,0,0),
 	]
+
 
 
 class BlueBlackRed(ColourMap):

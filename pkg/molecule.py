@@ -10,7 +10,7 @@ from networkx.algorithms.shortest_paths.generic import shortest_path_length
 try:
 	import data
 	import display
-	import basissets
+	# import basissets
 except:
 	import pkg.data as data
 	import pkg.display as display

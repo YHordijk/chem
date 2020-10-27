@@ -20,11 +20,11 @@ def update(self, params=None):
 	# self.look_at(params['mols'][0].center_of_mass())
 
 
-# disp.Display.update = update
+disp.Display.update = update
 
 
 
-m = mol.load_mol('cyclooctatetraene', redownload=False)
+m = mol.load_mol('water', redownload=False)
 d = disp.Display(bkgr_colour=(0, 0, 0))
 
 
@@ -32,7 +32,7 @@ d = disp.Display(bkgr_colour=(0, 0, 0))
 # m.shake(1)
 # m.center()
 
-# surface_mesh = mesh.molecule_surface(m, resolution=0.5, dist_thresh=1)
+surface_mesh = mesh.molecule_surface(m, resolution=0.5, thresh=1)
 d.draw_molecule(m, draw_atoms=True, draw_bonds=True)
 
 mini = minimizers.UFF()
