@@ -10,6 +10,9 @@ class Mesh:
 		self.vertices = vertices
 		self.triangles = triangles
 
+
+
+
 	def rotate(self, rotation):
 		r = rotation[0]
 		Rx = np.array(([	  1, 	  0,	   0],
@@ -28,8 +31,7 @@ class Mesh:
 
 		R = Rx @ Ry @ Rz
 
-
-		self.vertices = np.asarray([R@v for v in self.vertices])
+		self.vertices = (R @ self.vertices.T).T
 
 
 def create_surface(f, resolution=0.5, thresh=0.3, ranges=((-1,1),(-1,1),(-1,1))):

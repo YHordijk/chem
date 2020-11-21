@@ -1,5 +1,6 @@
 import numpy as np 
 import pubchempy as pcp
+import Bio.PDB as pdb
 import os
 import periodictable as pt
 from math import sin, cos
@@ -51,6 +52,21 @@ def get_from_pubchem(name, record_type='3d'):
 	mol = Molecule(name.capitalize(), elements, positions)
 	path = structures_folder + name + '.xyz'
 	save_to_xyz(mol, path)
+
+	return mol
+
+
+def get_from_pdb(name):
+	pdbl = pdb.PDBList()
+	pdbl.retrieve_pdb_file(name, pdir=structures_folder, file_format='pdb')
+	parser = pdb.PDBParser(PERMISSIVE=True, QUIET=True)
+	data = parser.get_structure(name, structures_folder + 'pdb' + name + '.ent')
+	model = list(data.get_models())[0]
+	chains = list(model.get_chains())
+	residues = [list(chain.get_residues()) for chain in chains]
+	residues = [residue for reslist in residues for residue in reslist]
+	atoms = [atom for residue in residues for atom in residue.get_atoms()]
+	print(dir(atoms[0]))
 
 	return mol
 
@@ -111,9 +127,11 @@ def save_to_xyz(mol, path, comment=''):
 	print(f'Saved {mol.name} to {path}.')
 
 
-def load_mol(name, redownload=False, record_type='3d'):
-	if redownload:
+def load_mol(name, download_from_pubchem=False, download_from_pdb=False, record_type='3d'):
+	if download_from_pubchem:
 		mol = get_from_pubchem(name, record_type=record_type)
+	elif download_from_pdb:
+		mol = get_from_pdb(name)
 	else:
 		path = find_mol(name.capitalize())
 		mol = load_from_file(path)
@@ -125,11 +143,12 @@ def load_mol(name, redownload=False, record_type='3d'):
 ##### ========================================== ATOM AND MOLECULE CLASS ========================================== ####
 
 class Atom:
-	def __init__(self, element=None, position=None, charge=None):
+	def __init__(self, element=None, position=None, charge=None, label=''):
 		self.element = element
 		self.atom_number = pt.elements.symbol(element).number
 		self.position = position
 		self.charge = charge
+		self.label = label
 
 		self.set_max_valence()
 		self.set_mass()
@@ -161,6 +180,7 @@ class Atom:
 		except:
 			self.max_valence = 1
 
+
 	def set_mass(self):
 		self.mass = pt.elements[self.atom_number].mass
 
@@ -185,7 +205,7 @@ class Molecule:
 		self.charges = charges
 
 		#get atoms from elements, positions
-		self.atoms = [Atom(elements[i], positions[i]) for i in range(len(self.elements))]
+		self.atoms = [Atom(elements[i], positions[i], label=i) for i in range(len(self.elements))]
 		#If a list of atoms is already given, append it to the list just produced
 		self.atoms += atoms
 
@@ -215,8 +235,8 @@ class Molecule:
 		string = ''
 		string += self.name + '\n'
 
-		for e, p in zip(self.elements, self.positions):
-			string += f'{e:2s}\t{p[0]: .5f}\t{p[1]: .5f}\t{p[2]: .5f}\n'
+		for a in self.atoms:
+			string += f'{a.element:2s}\t{a.position[0]: .5f}\t{a.position[1]: .5f}\t{a.position[2]: .5f}\n'
 
 		return string
 

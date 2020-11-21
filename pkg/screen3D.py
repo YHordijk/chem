@@ -36,6 +36,7 @@ class Screen3D:
 	def size(self):
 		return self._size
 
+
 	@size.setter
 	def size(self, val):
 		self._size = val
@@ -95,6 +96,7 @@ class Screen3D:
 		f = np.array([[1, 0, e[0]/e[2]], [0, 1, e[1]/e[2]], [0, 0, 1/e[2]]]) @ d
 		return np.vstack((f[0]/f[2], f[1]/f[2])).T.astype(int)
 
+
 	def draw_pixel(self, pos, colour=(255,255,255)):
 		try:
 			pos = self.project(pos)
@@ -102,6 +104,7 @@ class Screen3D:
 		except Exception as e:
 			pass
 	
+
 	def draw_pixels(self, poss, colour=(255,255,255), colour_func=None, colour_array=None):
 		set_at = self.disp.set_at
 		if type(colour_array) is np.ndarray:
@@ -178,6 +181,7 @@ class Screen3D:
 				pg.draw.line(self.disp, colour, poss[0]+perp, poss[1]+perp, d)
 		except:
 			pass
+
 
 	def draw_triple_bond(self, poss, colour=(255,255,255), width=1):
 		try:

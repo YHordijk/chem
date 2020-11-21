@@ -73,6 +73,7 @@ class ContractedGaussian:
 	
 
 	def __call__(self, X, Y, Z):
+		i, j, k = self.powers
 		X**i * Y**j * Z**k
 		return sum(c*p(X,Y,Z) for c, p in zip(self.params['coefficients'], self.params['primitives']))
 
@@ -136,7 +137,7 @@ class Basis:
 		params['exponents'] = exponents
 		params['coefficients'] = coefficients
 
-		return ContractedGaussian(z, n, l, ml, params)
+		return ContractedGaussian(z, n, l, ml, c, params)
 
 		#gather all primitives for atom
 		

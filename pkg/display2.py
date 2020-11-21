@@ -6,6 +6,7 @@ from math import sin, cos
 import math
 import mcubes
 from time import perf_counter as pc
+import skimage.draw as skdraw
 
 import pkg.colour_maps as cmap
 
@@ -19,7 +20,6 @@ class Display:
 		self.camera_orientation = np.asarray(camera_orientation)
 		self.project_type = project_type
 		self.bkgr_colour = bkgr_colour
-		self.complementary_colour = [255-x for x in bkgr_colour]
 			
 		self.size = self.width, self.height = size
 		self.set_projection_plane()
@@ -32,14 +32,13 @@ class Display:
 
 		width = int(width/a1.distance_to(self.camera_position))
 
-		rects = []
 
 		if order == 1:
 			if draw_background:
-				rects.append(draw_line(surf, self.complementary_colour, p1, p2, width + outline_width))
+				draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
 			else:
-				rects.append(draw_line(surf, a1.colour,p1,m, width))
-				rects.append(draw_line(surf, a2.colour,m,p2, width))
+				draw_line(surf, a1.colour,p1,m, width)
+				draw_line(surf, a2.colour,m,p2, width)
 
 		elif order == 2:
 			poss = np.asarray([p1,p2])
@@ -49,16 +48,16 @@ class Display:
 				perp = width * perp / np.linalg.norm(perp)
 				
 				if draw_background:
-					rects.append(draw_line(surf, self.complementary_colour, p1-perp, p2-perp, width + outline_width))
+					draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
 				else:
-					rects.append(draw_line(surf, a1.colour,p1-perp,m-perp, width))
-					rects.append(draw_line(surf, a2.colour,m-perp,p2-perp, width))
+					draw_line(surf, a1.colour,p1-perp,m-perp, width)
+					draw_line(surf, a2.colour,m-perp,p2-perp, width)
 
 				if draw_background:
-					rects.append(draw_line(surf, self.complementary_colour, p1+perp, p2+perp, width + outline_width))
+					draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
 				else:
-					rects.append(draw_line(surf, a1.colour,p1+perp,m+perp, width))
-					rects.append(draw_line(surf, a2.colour,m+perp,p2+perp, width))
+					draw_line(surf, a1.colour,p1+perp,m+perp, width)
+					draw_line(surf, a2.colour,m+perp,p2+perp, width)
 
 
 		elif order == 3:
@@ -70,47 +69,51 @@ class Display:
 				width = round(width/1.5)
 				
 				if draw_background:
-					rects.append(draw_line(surf, self.complementary_colour, p1-perp, p2-perp, width + outline_width))
+					draw_line(surf, self.bkgr_colour, p1-perp, p2-perp, width + outline_width)
 				else:
-					rects.append(draw_line(surf, a1.colour,p1-perp,m-perp, width))
-					rects.append(draw_line(surf, a2.colour,m-perp,p2-perp, width))
+					draw_line(surf, a1.colour,p1-perp,m-perp, width)
+					draw_line(surf, a2.colour,m-perp,p2-perp, width)
 
 				if draw_background:
-					rects.append(draw_line(surf, self.complementary_colour, p1, p2, width + outline_width))
+					draw_line(surf, self.bkgr_colour, p1, p2, width + outline_width)
 				else:
-					rects.append(draw_line(surf, a1.colour,p1,m, width))
-					rects.append(draw_line(surf, a2.colour,m,p2, width))
+					draw_line(surf, a1.colour,p1,m, width)
+					draw_line(surf, a2.colour,m,p2, width)
 
 				if draw_background:
-					rects.append(draw_line(surf, self.complementary_colour, p1+perp, p2+perp, width + outline_width))
+					draw_line(surf, self.bkgr_colour, p1+perp, p2+perp, width + outline_width)
 				else:
-					rects.append(draw_line(surf, a1.colour,p1+perp,m+perp, width))
-					rects.append(draw_line(surf, a2.colour,m+perp,p2+perp, width))
+					draw_line(surf, a1.colour,p1+perp,m+perp, width)
+					draw_line(surf, a2.colour,m+perp,p2+perp, width)
 
 		elif order == 1.5:
 			NotImplemented
 
-		return rects
+
+
+	def circle(self, surf, colour, center, radius):
+		rr, cc = skdraw.circle(*center, radius)
+		surf[rr, cc] = colour
+
+
 
 
 	def draw_atom(self, surf, a, size=300, outline_width=2):
 		rad = int(a.covalent_radius/a.distance_to(self.camera_position) * size)
 		p = self.atom_projections[a]
-		rect = pg.draw.circle(surf, self.complementary_colour, p, rad+outline_width)
+		pg.draw.circle(surf, self.bkgr_colour, p, rad+outline_width)
 		pg.draw.circle(surf, a.colour, p, rad)
-		return [rect]
 
 
 
-	def handle_events(self, params):
+	def handle_events(self, events, keys, params):
 			'''
 			Function that handles events during running
 			'''
-			if params['keys'][pg.K_ESCAPE]:
+			if keys[pg.K_ESCAPE]:
 				params['run'] = False
 
-
-			for e in params['events']:
+			for e in events:
 				if e.type == pg.VIDEORESIZE:
 					self.size = self.width, self.height = e.dict['size']
 					params['draw_surf'] = pg.transform.scale(params['draw_surf'], self.size)
@@ -129,7 +132,7 @@ class Display:
 
 
 			move = pg.mouse.get_rel()
-			if params['keys'][pg.K_LCTRL] or params['keys'][pg.K_RCTRL]:
+			if keys[pg.K_LCTRL] or keys[pg.K_RCTRL]:
 				if pg.mouse.get_pressed()[2]:
 						self.camera_position[0] += move[0]/50
 						self.camera_position[1] += move[1]/50
@@ -197,9 +200,7 @@ class Display:
 	def pre_update(self, params):
 		self.set_rotation_matrix()
 		self.atom_projections = {a:self.project(a.position) for a in params['mols'][0].atoms}
-		params['keys'] = pg.key.get_pressed()
-		params['events'] = pg.event.get()
-		params = self.handle_events(params)
+		params = self.handle_events(pg.event.get(), pg.key.get_pressed(), params)
 
 		return params
 
@@ -214,27 +215,31 @@ class Display:
 
 
 	def draw_3dpoints(self, params, P, array, colour_map=cmap.BlueRed()):
-		projected_P = self.project_array(P)
+		# a = colour_map.get_colour(a)
+
+		projected_a = self.project_array(P)
 		surf = params['draw_surf']
-		[pg.draw.circle(surf, ((0,0,255), (255,0,0))[float(a)>0], p, r) for a, p, r in zip(array, projected_P, params['R'])]
+		r = lambda x: int(float(x)**2*10)
+		[pg.draw.circle(surf, ((0,0,255), (255,0,0))[float(a)<0], p, 3) for a, p in zip(array, projected_a) if r(a)>0]
 
 
 	def draw_mesh(self, params, mesh, fill=True):
+		# start = pc()
 		vert, tria = mesh.vertices, mesh.triangles
-		vert_p = self.project_array(vert)
+		vert_p = [tuple(self.project(x)) for x in vert]
+
+		# print('Project time (s):', pc()-start)
+		# start = pc()
 
 		surf = params['draw_surf']
 
 		dist = lambda x: np.linalg.norm(self.camera_position - vert[x[0]])
 		if fill:
 			for i, t in enumerate(sorted(tria, key=dist, reverse=True)):
-				# d = dist(t)
+				d = dist(t)
+				# c = (min(255,255//math.sqrt(d/3)),min(120,120//math.sqrt(d/3)),min(255,255//math.sqrt(d/3)))
 				c = (255,255,255)
-				try:
-					pgfx.trigon(surf, *vert_p[t[0]], *vert_p[t[1]], *vert_p[t[2]], c)
-				except:
-					pass
-
+				pgfx.trigon(surf, *vert_p[t[0]], *vert_p[t[1]], *vert_p[t[2]], c)
 
 
 	def draw_molecule(self, mol, draw_hydrogens=True, draw_atoms=True, draw_bonds=True):
@@ -274,8 +279,6 @@ class Display:
 			params['time'] += params['dT']
 			params['draw_surf'].fill(self.bkgr_colour)
 
-			params['rects'] = []
-
 			self.pre_update(params)
 			self.update(params)
 
@@ -291,26 +294,25 @@ class Display:
 					if params['draw_bonds']:
 						for b, order in bonds[a].items():
 							if d > cam_dist(b):
-								params['rects'] += self.draw_bond(params['draw_surf'], a, b, order, draw_background=True)
+								self.draw_bond(params['draw_surf'], a, b, order, draw_background=True)
 					if params['draw_atoms']:
-						params['rects'] += self.draw_atom(params['draw_surf'], a)
+						self.draw_atom(params['draw_surf'], a)
 					if params['draw_bonds']:
 						for b, order in bonds[a].items():
 							if d > cam_dist(b):
-								params['rects'] += self.draw_bond(params['draw_surf'], a, b, order, draw_background=False)
+								self.draw_bond(params['draw_surf'], a, b, order, draw_background=False)
 
 				else:
 					if a.element == 'H':
 						continue
 					for b, order in bonds[a].items():
 						if d > cam_dist(b) and not b.element == 'H':
-							params['rects'] += self.draw_bond(draw_surf, a, b, order)
+							self.draw_bond(draw_surf, a, b, order)
 					if params['draw_atoms']:
-						params['rects'] += self.draw_atom(draw_surf, a)
+						self.draw_atom(draw_surf, a)
 			
 			params['disp'].blit(params['draw_surf'], (0,0))
 			self.post_update(params)
-			# pg.display.update(params['rects'])
 			pg.display.update()
 
 			# print('Total  time (s):', params['dT'])

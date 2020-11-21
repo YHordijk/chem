@@ -22,6 +22,7 @@ BASIS_SET_DIR = rf'{RESOURCES_DIR}\basissets'
 MAX_PRINCIPAL_QUANTUM_NUMBER = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_quantum_number.csv')
 MAX_VALENCE = csv_to_dict(rf'{RESOURCES_DIR}\elements\max_valence.csv')
 ATOM_COLOURS = csv_to_dict(rf'{RESOURCES_DIR}\elements\colours.csv')
+IONISATION_ENERGIES = csv_to_dict(rf'{RESOURCES_DIR}\elements\ionisation_energies.csv')
 
 
 #forcefield parameters
