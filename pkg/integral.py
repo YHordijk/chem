@@ -257,9 +257,17 @@ def fock_matrix(aos, atomlist, coeffs):
 
 	return F, JK
 
-def rothaan_hall(S, F):
-	E, C = np.linalg.eigh((F, S))
-	return E, C
+def rothaan_hall(X, F):
+	Fprime = np.dot(X.T, np.dot(F, X))
+	evalFprime, Cprime = np.linalg.eig(Fprime)
+	idx = evalFprime.argsort()
+	evalFprime = evalFprime[idx]
+	Cprime = Cprime[:,idx]
+
+	C = np.dot(X, Cprime)
+
+	return evalFprime, C
+
 
 def hartree_fock(aos, atomlist, epsilon=1e-7, C=None, max_iter=100):
 	n = len(aos)
@@ -267,25 +275,32 @@ def hartree_fock(aos, atomlist, epsilon=1e-7, C=None, max_iter=100):
 		C = np.eye(n)
 
 	S = overlap_matrix(aos)
+	#get X
+	evalS, U = np.linalg.eig(S)
+	diagS = np.dot(U.T, np.dot(S, U))
+	diagS_minushalf = np.diag(np.diagonal(diagS)**-.5)
+	X = np.dot(U, np.dot(diagS_minushalf, U.T))
+	
+
 
 	energy_list = []
 	delta = 0
 	for i in range(max_iter):
 		F, JK = fock_matrix(aos, atomlist, C)
 		E, C = rothaan_hall(S, F)
-		EHF = 0
-		C = np.zeros((n,n))
-		for i in range(n):
-			EHF += 2*E[i][i] - 1/2*JK[i][i]
-			C = C + 2*C[i][i] - 1/2*JK[i][i]
+		print(C)
+		print(C.shape)
+		# EHF = 0
+		# for i in range(n):
+		# 	EHF += 2*E[i][i] - 1/2*JK[i][i]
 
-		energy_list.append(EHF)
+		# energy_list.append(EHF)
 
-		print(f'Iteration: {i}, Energy: {EHF}, Delta: {delta}')
-		if i > 1:
-			delta = abs(energy_list[-1] - energy_list[-2])
-			if abs(energy_list[-1] - energy_list[-2]) < epsilon:
-				print(f'SCF converged')
-				break
+		# print(f'Iteration: {i}, Energy: {EHF}, Delta: {delta}')
+		# if i > 1:
+		# 	delta = abs(energy_list[-1] - energy_list[-2])
+		# 	if abs(energy_list[-1] - energy_list[-2]) < epsilon:
+		# 		print(f'SCF converged')
+		# 		break
 
 	return energy_list, C

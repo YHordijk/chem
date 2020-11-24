@@ -143,12 +143,13 @@ def load_mol(name, download_from_pubchem=False, download_from_pdb=False, record_
 ##### ========================================== ATOM AND MOLECULE CLASS ========================================== ####
 
 class Atom:
-	def __init__(self, element=None, position=None, charge=None, label=''):
+	def __init__(self, element=None, position=None, charge=None, label='', index=0):
 		self.element = element
 		self.atom_number = pt.elements.symbol(element).number
 		self.position = position
 		self.charge = charge
 		self.label = label
+		self.index = index
 
 		self.set_max_valence()
 		self.set_mass()
@@ -205,7 +206,7 @@ class Molecule:
 		self.charges = charges
 
 		#get atoms from elements, positions
-		self.atoms = [Atom(elements[i], positions[i], label=i) for i in range(len(self.elements))]
+		self.atoms = [Atom(elements[i], positions[i], label=i, index=i) for i in range(len(self.elements))]
 		#If a list of atoms is already given, append it to the list just produced
 		self.atoms += atoms
 
@@ -256,11 +257,23 @@ class Molecule:
 			z = a.atom_number
 			ce = b[str(z)]['electron_shells'][-1]
 			l = ce['angular_momentum']
-			print(l)
 			coeff = ce['']
 
 
 	#### MOLECULE MANIPULATION
+	def get_coordinates(self):
+		C = np.zeros((len(self.atoms), 3))
+		for i, a in enumerate(self.atoms):
+			C[i] = a.position
+
+		return C
+
+
+	def set_coordinates(self, C):
+		for i, a in enumerate(self.atoms):
+			a.position = C[i]
+
+
 	def apply_gradient(self, grad, strength=1):
 		for atom, grad in grad.items():
 			atom.position = atom.position - grad * strength

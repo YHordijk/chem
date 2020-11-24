@@ -34,16 +34,16 @@ class Mesh:
 		self.vertices = (R @ self.vertices.T).T
 
 
-def create_surface(f, resolution=0.5, thresh=0.3, ranges=((-1,1),(-1,1),(-1,1))):
+def create_surface(f, resolution=0.5, thresh=0, ranges=((-1,1),(-1,1),(-1,1))):
 	x, y, z = (np.arange(ranges[0][0], ranges[0][1], resolution), 
 			   np.arange(ranges[1][0], ranges[1][1], resolution), 
 			   np.arange(ranges[2][0], ranges[2][1], resolution))
-
 	X, Y, Z = np.meshgrid(x, y, z)
+
 	u = f(X,Y,Z)
 
 	vertices, triangles = mcubes.marching_cubes(u, thresh)
-
+	print(vertices)
 	return Mesh(vertices, triangles)
 
 

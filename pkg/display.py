@@ -137,7 +137,11 @@ class Display:
 				if pg.mouse.get_pressed()[0]:
 					params['rot'] = np.array([move[1]/150, -move[0]/150, 0])
 
-			[m.rotate(params['rot']) for m in params['mols']]
+			try:
+				[m.rotate(params['rot']) for m in params['mols']]
+			except:
+				params['mol'].rotate(params['rot'])
+
 			
 
 			self.camera_position[2] += params['zoom']
@@ -196,7 +200,7 @@ class Display:
 
 	def pre_update(self, params):
 		self.set_rotation_matrix()
-		self.atom_projections = {a:self.project(a.position) for a in params['mols'][0].atoms}
+		self.atom_projections = {a:self.project(a.position) for a in params['mol'].atoms}
 		params['keys'] = pg.key.get_pressed()
 		params['events'] = pg.event.get()
 		params = self.handle_events(params)
@@ -216,7 +220,7 @@ class Display:
 	def draw_3dpoints(self, params, P, array, colour_map=cmap.BlueRed()):
 		projected_P = self.project_array(P)
 		surf = params['draw_surf']
-		[pg.draw.circle(surf, ((0,0,255), (255,0,0))[float(a)>0], p, r) for a, p, r in zip(array, projected_P, params['R'])]
+		[pg.draw.circle(surf, ((0,0,255), (255,0,0))[float(a)>0], p, min(r*2,8)) for a, p, r in zip(array, projected_P, params['R']) if r>0]
 
 
 	def draw_mesh(self, params, mesh, fill=True):
@@ -256,7 +260,7 @@ class Display:
 		params['zoom'] = 0
 		params['move'] = (0,0)
 		params['rot'] = np.array([0.,0.,0.])
-		params['mols'] = [mol]
+		params['mol'] = mol
 		params['draw_hydrogens'] = draw_hydrogens
 		params['draw_atoms'] = draw_atoms
 		params['draw_bonds'] = draw_bonds
@@ -275,7 +279,6 @@ class Display:
 			params['draw_surf'].fill(self.bkgr_colour)
 
 			params['rects'] = []
-
 			self.pre_update(params)
 			self.update(params)
 
@@ -316,18 +319,19 @@ class Display:
 			# print('Total  time (s):', params['dT'])
 
 
-	def draw_molecule_animation(self, mols, animation_speed=4, draw_hydrogens=True, draw_atoms=True):
+	def draw_molecule_animation(self, mols, animation_speed=4, draw_hydrogens=True, draw_atoms=True, draw_bonds=True):
 		'''
 		Method that draws and displays the provided molecule
 		'''
-		disp = pg.display.set_mode(self.size, pg.locals.HWSURFACE | pg.locals.DOUBLEBUF | pg.locals.RESIZABLE)
+		params = {}
 		params['draw_surf'] = pg.surface.Surface(self.size)
+
+
 
 		clock = pg.time.Clock()
 		tick = clock.tick_busy_loop
 
 		#set parameters for the screen
-		params = {}
 		params['run'] = True
 		params['FPS'] = 120
 		params['updt'] = 0
@@ -338,6 +342,8 @@ class Display:
 		params['mols'] = mols
 		params['draw_hydrogens'] = draw_hydrogens
 		params['draw_atoms'] = draw_atoms
+		params['draw_bonds'] = draw_bonds
+		params['disp'] = pg.display.set_mode(self.size, pg.locals.HWSURFACE | pg.locals.DOUBLEBUF | pg.locals.RESIZABLE)
 
 		cam_dist = lambda a: np.linalg.norm(a.position - self.camera_position)
 
@@ -345,7 +351,7 @@ class Display:
 		bonds_collection = [mol.bonds for mol in mols]
 
 		
-		curr_mol_index = 0
+		params['curr_mol_idx'] = 0
 		mol = mols[0]
 		params['mol'] = mol
 
@@ -356,20 +362,19 @@ class Display:
 			params['time'] += params['dT']
 
 			if params['updt']%animation_speed == 0:
-				curr_mol_index += 1
-				curr_mol_index = curr_mol_index%len(mols)
-				mol = mols[curr_mol_index]
+				params['curr_mol_idx'] += 1
+				params['curr_mol_idx'] = params['curr_mol_idx']%len(mols)
+				mol = mols[params['curr_mol_idx']]
 				params['mol'] = mol
 
-			self.pre_update(params, mol)
+			self.pre_update(params)
+			self.update(params)
 
 			#clear screen
 			params['draw_surf'].fill(self.bkgr_colour)
 
-
-
-			atoms = atoms_collection[curr_mol_index]
-			bonds = bonds_collection[curr_mol_index]
+			atoms = atoms_collection[params['curr_mol_idx']]
+			bonds = bonds_collection[params['curr_mol_idx']]
 
 			#sort atoms by distance to camera and invert
 			sorted_atoms = sorted([(a, cam_dist(a)) for a in atoms], key=lambda x: x[1], reverse=True)
@@ -394,5 +399,6 @@ class Display:
 						self.draw_atom(draw_surf, a)
 
 
-			disp.blit(params['draw_surf'], (0,0))
+			params['disp'].blit(params['draw_surf'], (0,0))
+			self.post_update(params)
 			pg.display.update()
