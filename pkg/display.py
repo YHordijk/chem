@@ -4,7 +4,7 @@ import pygame.gfxdraw as pgfx
 import pygame.locals as locals
 from math import sin, cos
 import math
-import mcubes
+# import mcubes
 from time import perf_counter as pc
 
 import pkg.colour_maps as cmap

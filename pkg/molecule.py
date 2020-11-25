@@ -1,6 +1,6 @@
 import numpy as np 
 import pubchempy as pcp
-import Bio.PDB as pdb
+# import Bio.PDB as pdb
 import os
 import periodictable as pt
 from math import sin, cos

@@ -16,23 +16,52 @@ except:
 
 
 
-def minimize_molecule( mol, force_field='UFF'):
+def minimize_molecule(mol, force_field='UFF', use_scipy=False):
 	mollist = []
 	def callback(xk):
+		# mol.center()
 		mollist.append(mol.copy())
 		mollist[-1].set_coordinates(xk.reshape((xk.size//3,3)))
 
 		return False
 
 	if force_field == 'UFF':
-		ff = UFF()
+		ff = UFF(unit='hartree')
 
 	x0 = mol.get_coordinates()
 	x0 = x0.reshape((x0.size))
-	params = ff.prepare_parameters(mol)	
-	sciopt.minimize(ff._get_energy, x0, jac=ff._get_energy_gradient, 
-			args=(mol, params), options={'maxiter':20000, 'disp':True}, 
+	params = ff.prepare_parameters(mol)
+
+	if use_scipy:
+		sciopt.minimize(ff._get_energy, x0, jac=ff._get_energy_gradient, 
+			args=(mol, params, False), options={'maxiter':20000, 'disp':True}, 
 			callback=callback, method='Newton-CG')
+
+	else:
+		maxiter = 2000
+		maxcartstep = 0.1
+		update_strength = .2
+		u = update_strength
+		energies = [float('inf')]
+		thresh = 1e-8
+		x = x0
+		for i in range(maxiter):
+			grad = ff._get_energy_gradient(x, mol, params)
+			grad = np.maximum(grad, -maxcartstep/update_strength)
+			grad = np.minimum(grad,  maxcartstep/update_strength)
+
+			x = x - grad * u
+
+			callback(x)
+			energies.append(ff.get_energy(mollist[-1], morse=False))
+
+			energy_diff = abs(energies[-1] - energies[-2])
+
+
+			if energy_diff < thresh:
+				print(f'Converged after {i} steps with energy {energies[-1]}.')
+				break
+
 
 	return mollist
 
@@ -329,8 +358,7 @@ class UFF:
 			grad[a2.index] += dtdr2 * dEdt
 			grad[a3.index] += dtdr3 * dEdt
 
-		grad = -grad * 0.04336 / 27.211386245988
-		print(grad)
+		grad = grad * 0.04336 / 27.211386245988
 		grad = grad.reshape((x.size))
 
 		return grad

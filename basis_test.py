@@ -1,7 +1,7 @@
 import pkg.molecule as mol
 import pkg.basisset as basis
 import pkg.display as disp
-import pkg.mesh as mesh
+# import pkg.mesh as mesh
 import pkg.integral as integral
 import pkg.extended_huckel as eh
 import pkg.minimizers as mini
@@ -69,12 +69,12 @@ m.center(m.atoms[0].position)
 
 print(uff.get_energy(m))
 print(m)
-m.shake(0)
+m.shake(.1)
 mollist = mini.minimize_molecule(m)
 energies = [uff.get_energy(x) for x in mollist]
 plt.plot(range(len(mollist)), energies)
 plt.show()
-d.draw_molecule_animation([m, mollist[-1]], draw_atoms=True, draw_bonds=True, animation_speed=30)
+d.draw_molecule_animation(mollist, draw_atoms=True, draw_bonds=True, animation_speed=4)
 
 # print(uff.get_energy(m))
 
